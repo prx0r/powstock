@@ -561,6 +561,184 @@ def run_finnhub(conn: sqlite3.Connection, artifact_store: ArtifactStore | None =
     return count
 
 
+def run_uk_parliament(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
+    """Run UK Parliament MP shareholdings collector."""
+    from powstock.collectors.uk_parliament import fetch_all_mp_shareholdings, filter_universe_holdings
+
+    print("Fetching UK MP shareholdings...")
+
+    with IngestRun(conn, source="uk_parliament", dataset="mp_shareholdings",
+                   source_url="https://members-api.parliament.uk") as run:
+        holdings = fetch_all_mp_shareholdings()
+        universe_holdings = filter_universe_holdings(holdings)
+
+        if artifact_store and holdings:
+            import json as _json
+            raw_bytes = _json.dumps([{
+                "member_id": h.member_id, "member_name": h.member_name,
+                "party": h.party, "category": h.category,
+                "description": h.description, "registered_at": h.registered_at,
+            } for h in holdings], indent=2, default=str).encode()
+            artifact = artifact_store.put_bytes(
+                data=raw_bytes, source="uk_parliament", dataset="mp_shareholdings",
+                run_id=run.id, source_url="https://members-api.parliament.uk",
+            )
+            run.link_artifact(artifact["sha256"], artifact["storage_uri"], artifact["bytes"])
+
+        # Store universe-relevant holdings
+        for h in universe_holdings:
+            conn.execute(
+                """INSERT OR REPLACE INTO insider_deals
+                   (event_id, ticker, company, director, position, action, price, shares, value,
+                    effective_at, published_at, observed_at, source_url,
+                    source_id, parser_version)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (f"mp_{h.member_id}_{h.registered_at[:10]}", "", h.member_name,
+                 h.party, "MP", 0.0, 0, 0.0,
+                 h.registered_at, h.registered_at, datetime.now().isoformat(),
+                 "https://members-api.parliament.uk",
+                 "uk_parliament", PARSER_VERSION),
+            )
+
+        conn.execute(
+            "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='uk_parliament'), 0) + 1)",
+            ("uk_parliament", datetime.now().isoformat(), len(holdings)),
+        )
+        run.complete(records_seen=len(holdings), records_accepted=len(universe_holdings))
+
+    print(f"  UK Parliament: {len(holdings)} total holdings, {len(universe_holdings)} universe matches")
+    return len(holdings)
+
+
+def run_congress_trades(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
+    """Run US Congress trading collector."""
+    from powstock.collectors.congress_trades import fetch_congress_trades
+
+    print("Fetching US Congress trades...")
+
+    with IngestRun(conn, source="congress_trades", dataset="financial_disclosures",
+                   source_url="https://disclosures-clerk.house.gov") as run:
+        trades = fetch_congress_trades()
+
+        if artifact_store and trades:
+            import json as _json
+            raw_bytes = _json.dumps([{
+                "member_name": t.member_name, "chamber": t.chamber,
+                "tx_date": t.tx_date, "source_url": t.source_url,
+            } for t in trades[:500]], indent=2, default=str).encode()  # limit for storage
+            artifact = artifact_store.put_bytes(
+                data=raw_bytes, source="congress_trades", dataset="financial_disclosures",
+                run_id=run.id, source_url="https://disclosures-clerk.house.gov",
+            )
+            run.link_artifact(artifact["sha256"], artifact["storage_uri"], artifact["bytes"])
+
+        conn.execute(
+            "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='congress_trades'), 0) + 1)",
+            ("congress_trades", datetime.now().isoformat(), len(trades)),
+        )
+        run.complete(records_seen=len(trades), records_accepted=len(trades))
+
+    print(f"  Congress: {len(trades)} disclosures")
+    return len(trades)
+
+
+def run_european_insiders(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
+    """Run European insider trading collector (BaFin/AMF/AFM)."""
+    from powstock.collectors.european_insiders import fetch_european_insiders
+
+    print("Fetching European insider trades...")
+
+    with IngestRun(conn, source="european_insiders", dataset="insider_deals",
+                   source_url="https://portal.mvp.bafin.de") as run:
+        trades = fetch_european_insiders()
+
+        if artifact_store and trades:
+            import json as _json
+            raw_bytes = _json.dumps([{
+                "source": t.source, "isin": t.isin, "issuer": t.issuer_name,
+                "insider": t.insider_name, "tx_type": t.tx_type, "tx_date": t.tx_date,
+            } for t in trades], indent=2, default=str).encode()
+            artifact = artifact_store.put_bytes(
+                data=raw_bytes, source="european_insiders", dataset="insider_deals",
+                run_id=run.id, source_url="https://portal.mvp.bafin.de",
+            )
+            run.link_artifact(artifact["sha256"], artifact["storage_uri"], artifact["bytes"])
+
+        conn.execute(
+            "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='european_insiders'), 0) + 1)",
+            ("european_insiders", datetime.now().isoformat(), len(trades)),
+        )
+        run.complete(records_seen=len(trades), records_accepted=len(trades))
+
+    print(f"  European: {len(trades)} insider trades")
+    return len(trades)
+
+
+def run_dmo_gilts(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
+    """Run DMO Gilts / Bank of England collector."""
+    from powstock.collectors.dmo_gilts import fetch_dmo_yields, fetch_boe_rate
+
+    print("Fetching DMO gilt yields...")
+
+    with IngestRun(conn, source="dmo_gilts", dataset="yield_curve",
+                   source_url="https://www.dmo.gov.uk") as run:
+        yields = fetch_dmo_yields()
+        boe_rate = fetch_boe_rate()
+
+        if artifact_store and yields:
+            import json as _json
+            raw_bytes = _json.dumps([{
+                "date": y.date, "maturity": y.maturity, "yield_pct": y.yield_pct,
+            } for y in yields], indent=2).encode()
+            artifact = artifact_store.put_bytes(
+                data=raw_bytes, source="dmo_gilts", dataset="yield_curve",
+                run_id=run.id, source_url="https://www.dmo.gov.uk",
+            )
+            run.link_artifact(artifact["sha256"], artifact["storage_uri"], artifact["bytes"])
+
+        conn.execute(
+            "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='dmo_gilts'), 0) + 1)",
+            ("dmo_gilts", datetime.now().isoformat(), len(yields)),
+        )
+        run.complete(records_seen=len(yields), records_accepted=len(yields))
+
+    rate_str = f", BoE rate: {boe_rate.rate_pct}%" if boe_rate else ""
+    print(f"  DMO: {len(yields)} yield curve points{rate_str}")
+    return len(yields)
+
+
+def run_commodity_prices(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
+    """Run commodity prices collector."""
+    from powstock.collectors.commodity_prices import fetch_all_commodity_prices
+
+    print("Fetching commodity spot prices...")
+
+    with IngestRun(conn, source="commodity_prices", dataset="spot_prices",
+                   source_url="https://api.metals.live") as run:
+        prices = fetch_all_commodity_prices()
+
+        if artifact_store and prices:
+            import json as _json
+            raw_bytes = _json.dumps([{
+                "commodity": p.commodity, "price": p.price, "currency": p.currency,
+                "date": p.date,
+            } for p in prices], indent=2).encode()
+            artifact = artifact_store.put_bytes(
+                data=raw_bytes, source="commodity_prices", dataset="spot_prices",
+                run_id=run.id, source_url="https://api.metals.live",
+            )
+            run.link_artifact(artifact["sha256"], artifact["storage_uri"], artifact["bytes"])
+
+        conn.execute(
+            "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='commodity_prices'), 0) + 1)",
+            ("commodity_prices", datetime.now().isoformat(), len(prices)),
+        )
+        run.complete(records_seen=len(prices), records_accepted=len(prices))
+
+    print(f"  Commodities: {len(prices)} prices")
+    return len(prices)
+
+
 def run_all(conn: sqlite3.Connection | None = None) -> dict[str, int]:
     """Run all collectors in sequence.
 
@@ -616,6 +794,37 @@ def run_all(conn: sqlite3.Connection | None = None) -> dict[str, int]:
     except Exception as e:
         log.error("finnhub collector failed: %s", e)
         results["finnhub"] = 0
+
+    # Free collectors (no API key needed)
+    try:
+        results["uk_parliament"] = run_uk_parliament(conn, artifact_store)
+    except Exception as e:
+        log.error("uk_parliament collector failed: %s", e)
+        results["uk_parliament"] = 0
+
+    try:
+        results["congress_trades"] = run_congress_trades(conn, artifact_store)
+    except Exception as e:
+        log.error("congress_trades collector failed: %s", e)
+        results["congress_trades"] = 0
+
+    try:
+        results["european_insiders"] = run_european_insiders(conn, artifact_store)
+    except Exception as e:
+        log.error("european_insiders collector failed: %s", e)
+        results["european_insiders"] = 0
+
+    try:
+        results["dmo_gilts"] = run_dmo_gilts(conn, artifact_store)
+    except Exception as e:
+        log.error("dmo_gilts collector failed: %s", e)
+        results["dmo_gilts"] = 0
+
+    try:
+        results["commodity_prices"] = run_commodity_prices(conn, artifact_store)
+    except Exception as e:
+        log.error("commodity_prices collector failed: %s", e)
+        results["commodity_prices"] = 0
 
     conn.commit()
 

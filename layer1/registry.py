@@ -197,6 +197,46 @@ register(
     function="fetch_nsm_page",
 )
 
+register(
+    source_id="uk_parliament",
+    name="UK MP Shareholdings",
+    enabled=True,
+    module="powstock.collectors.uk_parliament",
+    function="fetch_all_mp_shareholdings",
+)
+
+register(
+    source_id="congress_trades",
+    name="US Congress Trading",
+    enabled=True,
+    module="powstock.collectors.congress_trades",
+    function="fetch_congress_trades",
+)
+
+register(
+    source_id="european_insiders",
+    name="European Insider Trading (BaFin/AMF/AFM)",
+    enabled=True,
+    module="powstock.collectors.european_insiders",
+    function="fetch_european_insiders",
+)
+
+register(
+    source_id="dmo_gilts",
+    name="DMO Gilts / Bank of England",
+    enabled=True,
+    module="powstock.collectors.dmo_gilts",
+    function="fetch_dmo_yields",
+)
+
+register(
+    source_id="commodity_prices",
+    name="Commodity Spot Prices",
+    enabled=True,
+    module="powstock.collectors.commodity_prices",
+    function="fetch_all_commodity_prices",
+)
+
 
 def print_registry() -> None:
     """Print the collector registry status."""
