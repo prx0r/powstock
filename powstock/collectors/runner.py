@@ -739,6 +739,223 @@ def run_commodity_prices(conn: sqlite3.Connection, artifact_store: ArtifactStore
     return len(prices)
 
 
+def run_filing_events(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
+    """Run filing events classifier for universe companies."""
+    from powstock.collectors.filing_events import fetch_universe_events
+
+    print("Fetching filing events...")
+
+    with IngestRun(conn, source="companies_house_filings", dataset="filing_events",
+                   source_url="https://api.company-information.service.gov.uk") as run:
+        results = fetch_universe_events()
+        count = 0
+
+        for ticker, events in results.items():
+            for event in events:
+                count += 1
+
+        if artifact_store and results:
+            import json as _json
+            raw_bytes = _json.dumps(results, indent=2, default=str).encode()
+            artifact = artifact_store.put_bytes(
+                data=raw_bytes, source="companies_house_filings", dataset="filing_events",
+                run_id=run.id, source_url="https://api.company-information.service.gov.uk",
+            )
+            run.link_artifact(artifact["sha256"], artifact["storage_uri"], artifact["bytes"])
+
+        conn.execute(
+            "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='companies_house_filings'), 0) + 1)",
+            ("companies_house_filings", datetime.now().isoformat(), count),
+        )
+        run.complete(records_seen=count, records_accepted=count)
+
+    print(f"  Filing events: {count} events")
+    return count
+
+
+def run_takeover_panel(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
+    """Run Takeover Panel disclosures collector."""
+    from powstock.collectors.takeover_panel import fetch_disclosure_table
+
+    print("Fetching Takeover Panel disclosures...")
+
+    with IngestRun(conn, source="takeover_panel", dataset="disclosures",
+                   source_url="https://www.thetakeoverpanel.org.uk") as run:
+        result = fetch_disclosure_table()
+        html = result.get("html", "")
+        count = 1 if html else 0
+
+        if artifact_store and html:
+            artifact = artifact_store.put_bytes(
+                data=html.encode(), source="takeover_panel", dataset="disclosures",
+                run_id=run.id, source_url="https://www.thetakeoverpanel.org.uk",
+            )
+            run.link_artifact(artifact["sha256"], artifact["storage_uri"], artifact["bytes"])
+
+        conn.execute(
+            "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='takeover_panel'), 0) + 1)",
+            ("takeover_panel", datetime.now().isoformat(), count),
+        )
+        run.complete(records_seen=count, records_accepted=count)
+
+    print(f"  Takeover Panel: {count} disclosure page")
+    return count
+
+
+def run_tr1(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
+    """Run FCA TR-1 major shareholder notifications."""
+    from powstock.collectors.tr1_notifications import fetch_tr1_announcements
+
+    print("Fetching TR-1 notifications...")
+
+    with IngestRun(conn, source="fca_tr1", dataset="shareholder_notifications",
+                   source_url="https://www.fca.org.uk") as run:
+        announcements = fetch_tr1_announcements()
+        count = len(announcements) if announcements else 0
+
+        if artifact_store and announcements:
+            import json as _json
+            raw_bytes = _json.dumps(announcements, indent=2, default=str).encode()
+            artifact = artifact_store.put_bytes(
+                data=raw_bytes, source="fca_tr1", dataset="shareholder_notifications",
+                run_id=run.id, source_url="https://www.fca.org.uk",
+            )
+            run.link_artifact(artifact["sha256"], artifact["storage_uri"], artifact["bytes"])
+
+        conn.execute(
+            "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='fca_tr1'), 0) + 1)",
+            ("fca_tr1", datetime.now().isoformat(), count),
+        )
+        run.complete(records_seen=count, records_accepted=count)
+
+    print(f"  TR-1: {count} notifications")
+    return count
+
+
+def run_ch_company_snapshot(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
+    """Run Companies House monthly company snapshot."""
+    from powstock.collectors.ch_company_snapshot import download_company_snapshot
+
+    print("Fetching CH company snapshot...")
+
+    with IngestRun(conn, source="ch_company_snapshot", dataset="monthly",
+                   source_url="https://download.companieshouse.gov.uk") as run:
+        result = download_company_snapshot()
+        count = 1 if result else 0
+
+        if artifact_store and result:
+            archive_paths = result.get("archive_paths", [])
+            for p in archive_paths:
+                from pathlib import Path
+                artifact = artifact_store.put_file(
+                    file_path=p, source="ch_company_snapshot", dataset="monthly",
+                    run_id=run.id, source_url="https://download.companieshouse.gov.uk",
+                )
+                run.link_artifact(artifact["sha256"], artifact["storage_uri"], artifact["bytes"])
+
+        conn.execute(
+            "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='ch_company_snapshot'), 0) + 1)",
+            ("ch_company_snapshot", datetime.now().isoformat(), count),
+        )
+        run.complete(records_seen=count, records_accepted=count)
+
+    print(f"  CH snapshot: {count} archive")
+    return count
+
+
+def run_ch_accounts_bulk(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
+    """Run Companies House XBRL accounts bulk."""
+    from powstock.collectors.ch_accounts_bulk import download_accounts_bulk
+
+    print("Fetching CH accounts bulk...")
+
+    with IngestRun(conn, source="ch_accounts_bulk", dataset="xbrl_archives",
+                   source_url="https://download.companieshouse.gov.uk") as run:
+        result = download_accounts_bulk()
+        count = 1 if result else 0
+
+        if artifact_store and result:
+            archive_paths = result.get("archive_paths", [])
+            for p in archive_paths:
+                from pathlib import Path
+                artifact = artifact_store.put_file(
+                    file_path=p, source="ch_accounts_bulk", dataset="xbrl_archives",
+                    run_id=run.id, source_url="https://download.companieshouse.gov.uk",
+                )
+                run.link_artifact(artifact["sha256"], artifact["storage_uri"], artifact["bytes"])
+
+        conn.execute(
+            "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='ch_accounts_bulk'), 0) + 1)",
+            ("ch_accounts_bulk", datetime.now().isoformat(), count),
+        )
+        run.complete(records_seen=count, records_accepted=count)
+
+    print(f"  CH accounts: {count} archive")
+    return count
+
+
+def run_fca_nsm(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
+    """Run FCA National Storage Mechanism."""
+    from powstock.collectors.fca_nsm import fetch_nsm_page
+
+    print("Fetching FCA NSM...")
+
+    with IngestRun(conn, source="fca_nsm", dataset="regulatory_announcements",
+                   source_url="https://www.fca.org.uk") as run:
+        announcements = fetch_nsm_page()
+        count = len(announcements) if announcements else 0
+
+        if artifact_store and announcements:
+            import json as _json
+            raw_bytes = _json.dumps(announcements, indent=2, default=str).encode()
+            artifact = artifact_store.put_bytes(
+                data=raw_bytes, source="fca_nsm", dataset="regulatory_announcements",
+                run_id=run.id, source_url="https://www.fca.org.uk",
+            )
+            run.link_artifact(artifact["sha256"], artifact["storage_uri"], artifact["bytes"])
+
+        conn.execute(
+            "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='fca_nsm'), 0) + 1)",
+            ("fca_nsm", datetime.now().isoformat(), count),
+        )
+        run.complete(records_seen=count, records_accepted=count)
+
+    print(f"  FCA NSM: {count} announcements")
+    return count
+
+
+def run_psc_snapshot(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
+    """Run PSC daily snapshot."""
+    from powstock.collectors.psc_snapshot import download_psc_snapshot
+    from datetime import datetime as dt
+
+    print("Fetching PSC snapshot...")
+
+    with IngestRun(conn, source="companies_house_psc", dataset="daily_snapshot",
+                   source_url="https://download.companieshouse.gov.uk") as run:
+        result = download_psc_snapshot()
+        count = result.get("total_parts", 0) if result else 0
+
+        if artifact_store and result:
+            archive_paths = result.get("archive_paths", [])
+            for p in archive_paths:
+                from pathlib import Path
+                artifact = artifact_store.put_file(
+                    file_path=p, source="companies_house_psc", dataset="daily_snapshot",
+                    run_id=run.id, source_url="https://download.companieshouse.gov.uk",
+                )
+                run.link_artifact(artifact["sha256"], artifact["storage_uri"], artifact["bytes"])
+
+        conn.execute(
+            "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='companies_house_psc'), 0) + 1)",
+            ("companies_house_psc", datetime.now().isoformat(), count),
+        )
+        run.complete(records_seen=count, records_accepted=count)
+
+    print(f"  PSC snapshot: {count} parts")
+    return count
+
+
 def run_all(conn: sqlite3.Connection | None = None) -> dict[str, int]:
     """Run all collectors in sequence.
 
@@ -825,6 +1042,49 @@ def run_all(conn: sqlite3.Connection | None = None) -> dict[str, int]:
     except Exception as e:
         log.error("commodity_prices collector failed: %s", e)
         results["commodity_prices"] = 0
+
+    # Existing built-but-not-wired collectors
+    try:
+        results["filing_events"] = run_filing_events(conn, artifact_store)
+    except Exception as e:
+        log.error("filing_events collector failed: %s", e)
+        results["filing_events"] = 0
+
+    try:
+        results["takeover_panel"] = run_takeover_panel(conn, artifact_store)
+    except Exception as e:
+        log.error("takeover_panel collector failed: %s", e)
+        results["takeover_panel"] = 0
+
+    try:
+        results["tr1"] = run_tr1(conn, artifact_store)
+    except Exception as e:
+        log.error("tr1 collector failed: %s", e)
+        results["tr1"] = 0
+
+    try:
+        results["ch_snapshot"] = run_ch_company_snapshot(conn, artifact_store)
+    except Exception as e:
+        log.error("ch_snapshot collector failed: %s", e)
+        results["ch_snapshot"] = 0
+
+    try:
+        results["ch_accounts"] = run_ch_accounts_bulk(conn, artifact_store)
+    except Exception as e:
+        log.error("ch_accounts collector failed: %s", e)
+        results["ch_accounts"] = 0
+
+    try:
+        results["fca_nsm"] = run_fca_nsm(conn, artifact_store)
+    except Exception as e:
+        log.error("fca_nsm collector failed: %s", e)
+        results["fca_nsm"] = 0
+
+    try:
+        results["psc_snapshot"] = run_psc_snapshot(conn, artifact_store)
+    except Exception as e:
+        log.error("psc_snapshot collector failed: %s", e)
+        results["psc_snapshot"] = 0
 
     conn.commit()
 
