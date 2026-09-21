@@ -25,7 +25,6 @@ def test_init_db_creates_tables():
         ).fetchall()
         table_names = {t[0] for t in tables}
 
-        assert "raw_ingest" in table_names
         assert "observation" in table_names
         assert "collector_state" in table_names
         assert "price_daily" in table_names
@@ -34,7 +33,8 @@ def test_init_db_creates_tables():
         assert "rns_announcements" in table_names
         assert "company_profiles" in table_names
         assert "ingest_run" in table_names
-        assert "raw_artifact" in table_names
+        assert "artifact_object" in table_names
+        assert "artifact_receipt" in table_names
         conn.close()
 
 
@@ -47,8 +47,8 @@ def test_price_upsert_idempotent():
         # Insert same price twice
         for _ in range(2):
             conn.execute(
-                "INSERT OR REPLACE INTO price_daily (ticker, date, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                ("TEST.L", "2026-09-21", 100.0, 105.0, 99.0, 102.0, 1000),
+                "INSERT OR REPLACE INTO price_daily (ticker, date, open, high, low, close, volume, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                ("TEST.L", "2026-09-21", 100.0, 105.0, 99.0, 102.0, 1000, "2026-09-21T00:00:00"),
             )
         conn.commit()
 

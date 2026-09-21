@@ -320,18 +320,19 @@ def run_insiders(conn: sqlite3.Connection, artifact_store: ArtifactStore | None 
                 conn.execute(
                     """INSERT OR REPLACE INTO insider_deals
                        (event_id, ticker, company, director, position, action, price, shares, value,
-                        effective_at, published_at, observed_at, source_url,
+                        effective_at, published_at, source_url,
                         group_shares, group_value, parse_status,
-                        source_id, parser_version, observed_at)
+                        source_id, artifact_id, parser_version, observed_at)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                     (event_id, deal["ticker"], deal["company"], deal["director"],
                      deal["position"], deal["transaction_type"], deal["price"],
                      deal["shares"], deal["total_value"],
                      deal["trade_date"], deal.get("filing_date", ""),
-                     datetime.now().isoformat(), deal.get("url", ""),
+                     deal.get("url", ""),
                      deal.get("group_shares"), deal.get("group_value"),
                      deal.get("parse_status", "complete"),
-                     "investegate_pdmr", PARSER_VERSION, datetime.now().isoformat()),
+                     "investegate_pdmr", None, PARSER_VERSION,
+                     datetime.now().isoformat()),
                 )
                 _store_obs(conn, "investegate_pdmr", deal["ticker"], "insider_deal", deal["transaction_type"])
                 count += 1
@@ -524,7 +525,7 @@ def run_companies(conn: sqlite3.Connection, artifact_store: ArtifactStore | None
 def run_finnhub(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
     """Run Finnhub insider collector (optional, requires API key)."""
     from powstock.settings import get_settings
-    api_key = get_settings().llm_api_key
+    api_key = get_settings().finnhub_api_key
     if not api_key:
         log.info("Finnhub: no API key configured, skipping")
         return 0
@@ -592,7 +593,7 @@ def run_all(conn: sqlite3.Connection | None = None) -> dict[str, int]:
         results["insiders"] = 0
 
     try:
-        results["short_interest"] = run_short_interest(conn)
+        results["short_interest"] = run_short_interest(conn, artifact_store)
     except Exception as e:
         log.error("short_interest collector failed: %s", e)
         results["short_interest"] = 0
@@ -653,17 +654,18 @@ def status(conn: sqlite3.Connection | None = None) -> None:
     print("\nTable Row Counts:")
     print("-" * 60)
     for table in ["price_daily", "insider_deals", "short_interest", "rns_announcements",
-                   "company_profiles", "ingest_run", "raw_artifact"]:
+                   "company_profiles", "ingest_run", "artifact_object", "artifact_receipt"]:
         try:
             count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             print(f"  {table:25s} | {count:6d} rows")
         except Exception:
             print(f"  {table:25s} | (not created)")
 
-    # Show artifact count
+    # Show artifact summary
     try:
-        count = conn.execute("SELECT COUNT(*) FROM raw_artifact").fetchone()[0]
-        print(f"\n  Raw artifacts: {count}")
+        obj_count = conn.execute("SELECT COUNT(*) FROM artifact_object").fetchone()[0]
+        receipt_count = conn.execute("SELECT COUNT(*) FROM artifact_receipt").fetchone()[0]
+        print(f"\n  Object store: {obj_count} objects, {receipt_count} receipts")
     except Exception:
         pass
 

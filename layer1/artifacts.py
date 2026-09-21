@@ -79,7 +79,10 @@ class IngestRun:
             self.error_count += 1
         if self.completed_at is None:
             self.complete()
-        return True  # suppress exception — we recorded it
+        # Only suppress IO/network errors, re-raise programming errors
+        if exc_type is not None and not issubclass(exc_type, (IOError, OSError, ConnectionError, TimeoutError)):
+            return False  # re-raise
+        return True  # suppress
 
     def start(self) -> None:
         """Record the start of an ingest run."""

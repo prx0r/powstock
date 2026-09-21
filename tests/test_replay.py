@@ -240,16 +240,24 @@ def test_ingest_run_lifecycle():
         assert row[2] == 10
         assert row[3] == 8
 
-        # Test error run
+        # Test error run (IO error — should be suppressed)
         with IngestRun(conn, source="failing_source") as run2:
-            raise ValueError("Simulated failure")
+            raise IOError("Simulated network failure")
 
         row2 = conn.execute(
             "SELECT status, error_message FROM ingest_run WHERE run_id=?",
             (run2.id,),
         ).fetchone()
         assert row2[0] == "error"
-        assert "Simulated failure" in row2[1]
+        assert "Simulated network failure" in row2[1]
+
+        # Test programming error — should be re-raised
+        try:
+            with IngestRun(conn, source="buggy_source") as run3:
+                raise ValueError("Programming bug")
+            assert False, "Should have raised ValueError"
+        except ValueError:
+            pass
 
         conn.close()
 

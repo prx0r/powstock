@@ -91,7 +91,7 @@ class TestCompaniesHouse:
 class TestPDMR:
     def test_fetch_pdmr_announcements(self):
         from powstock.collectors.fca_pdmr import fetch_pdmr_announcements
-        deals = fetch_pdmr_announcements(max_pages=1)
+        deals, raw = fetch_pdmr_announcements(max_pages=1)
         assert isinstance(deals, list)
         # Investegate should return some PDMR deals
         if deals:

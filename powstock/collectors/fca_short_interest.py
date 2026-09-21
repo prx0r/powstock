@@ -219,7 +219,7 @@ def fetch_all_short_interest() -> dict[str, dict[str, Any]]:
     """
     from powstock.universe import UNIVERSE
 
-    positions = fetch_current_short_positions()
+    positions, _raw_bytes = fetch_current_short_positions()
     results = {}
 
     for security in UNIVERSE:

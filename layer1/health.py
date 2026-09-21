@@ -258,8 +258,8 @@ def _check_source_health(manifest: SourceManifest, db_path: str | Path) -> Sourc
     # Count raw artifacts
     try:
         count = conn.execute(
-            "SELECT COUNT(*) FROM raw_artifact WHERE storage_uri LIKE ?",
-            (f"%{manifest.id}%",),
+            """SELECT COUNT(*) FROM artifact_receipt WHERE source = ?""",
+            (manifest.id,),
         ).fetchone()[0]
         health.artifact_count = count
     except Exception:

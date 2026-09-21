@@ -12,6 +12,8 @@ class Settings(BaseSettings):
     llm_base_url: str = ""
     llm_api_key: str = ""
     llm_model: str = ""
+    finnhub_api_key: str = ""
+    tracefour_api_key: str = ""
     r2_account_id: str = "954612afb5a97bb15dddcdc70176813d"
     r2_endpoint: str = "https://954612afb5a97bb15dddcdc70176813d.r2.cloudflarestorage.com"
     r2_bucket: str = "powstock-garden"
