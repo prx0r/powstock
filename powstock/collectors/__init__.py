@@ -5,6 +5,9 @@ from powstock.collectors.fca_pdmr import fetch_pdmr_announcements, fetch_ticker_
 from powstock.collectors.fca_short_interest import fetch_current_short_positions, fetch_all_short_interest
 from powstock.collectors.rns_announcements import fetch_rns_announcements, fetch_ticker_rns
 from powstock.collectors.companies_house import fetch_company_profile, fetch_universe_companies
+from powstock.collectors.tracefour import fetch_uk_filings, fetch_clusters, fetch_streaks
+from powstock.collectors.psc_snapshot import fetch_universe_psc, summarise_psc
+from powstock.collectors.filing_events import fetch_universe_events, classify_filing, summarise_events
 from powstock.collectors.runner import init_db, run_all, status
 
 __all__ = [
@@ -19,6 +22,14 @@ __all__ = [
     "fetch_ticker_rns",
     "fetch_company_profile",
     "fetch_universe_companies",
+    "fetch_uk_filings",
+    "fetch_clusters",
+    "fetch_streaks",
+    "fetch_universe_psc",
+    "summarise_psc",
+    "fetch_universe_events",
+    "classify_filing",
+    "summarise_events",
     "init_db",
     "run_all",
     "status",
