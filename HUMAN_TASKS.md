@@ -6,24 +6,9 @@ These are things only you can do. Everything else I can handle.
 
 ---
 
-## 1. Companies House API Key (FREE — unlocks company data)
+## 1. ~~Companies House API Key~~ ✅ DONE
 
-**What you get:** Company profiles, directors, filings, charges, PSC, financials for all 25 universe stocks.
-
-**Steps:**
-
-1. Go to **https://developer.company-information.service.gov.uk/**
-2. Click **"Register for an account"**
-3. Fill in your details (name, email, password)
-4. Verify your email
-5. Log in and go to **"Manage API keys"**
-6. Click **"Create new API key"**
-7. Copy the key (format: `xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx`)
-8. Send me the key and I'll add it to `.env`
-
-**Rate limit:** 600 requests per 5 minutes (free)
-
-**Time:** 2 minutes
+Key is configured and working. Company profiles, directors, filings, charges, PSC all collecting.
 
 ---
 

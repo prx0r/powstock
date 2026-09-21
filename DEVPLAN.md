@@ -273,25 +273,46 @@ What happened to the relevant securities?
 - [x] Implemented self-registering tool pattern from companies-house-mcp
 - [x] Implemented server-guided Retry-After from RegistrumUK starter
 - [x] Added etag-based dedup concept from OpenOwnership ingester
-- [x] Built Yahoo Finance price collector (24/25 tickers)
+- [x] Built Yahoo Finance price collector (24/25 tickers, 5,968 rows)
 - [x] Built FCA short interest collector (421 positions)
-- [x] Built Investegate RNS announcement collector
-- [x] Built Companies House REST API collector
+- [x] Built Investegate RNS announcement collector (891 announcements)
+- [x] Built Companies House REST API collector (25/25 profiles)
+- [x] Built ArtifactStore — global content-addressed objects + per-run receipts
+- [x] Built IngestRun — context manager lifecycle (start → fetch → store → parse → complete)
+- [x] Schema v2 — artifact_object, artifact_receipt, source_coverage, provenance columns
+- [x] SQLite foreign key enforcement (PRAGMA foreign_keys=ON)
+- [x] 10 Layer 2 signals (insider, short, momentum, alignment, composite)
+- [x] POWK bridge (Node, Edge, Observation, Evidence export)
+- [x] Daily state builder (pow_company_state_daily)
+- [x] 21 tests passing (replay, idempotence, universe, FK enforcement, global dedup)
+- [x] Takeover Panel disclosures collector
+- [x] FCA TR-1 major shareholder notifications
+- [x] CH company snapshot monthly collector
+- [x] CH accounts bulk collector
+- [x] FCA NSM collector
 
 ### 🔄 IN PROGRESS
 - [ ] iXBRL parser from uk-accounts-pipeline (reference cloned, not yet implemented)
-- [ ] pow_company_state_daily schema
-- [ ] Wire up powuk physical constraint data
-- [ ] Takeover Panel disclosures collector
-- [ ] FCA TR-1 major shareholder notifications
+- [ ] Wire Tracefour as primary PDMR source (collector built, needs API key)
+- [ ] Historical price backfill to listing date (currently ~253 days)
+- [ ] Wire Filing Events into daily pipeline (built, not wired to run_all)
 
 ### ⏳ PENDING
-- [ ] Request CH bulk products (216, 199, 201, 197)
-- [ ] Build director network analysis
-- [ ] Build capital response index
-- [ ] Build opportunity gap measurement
+- [ ] Director network analysis
+- [ ] Capital response index
+- [ ] Opportunity gap measurement
+- [ ] R2 replication with verification
+- [ ] Source coverage tracking (table exists, not populated)
+- [ ] Layer 1 daemon (layer1/collect.py)
 
 ### Reference Repos (cloned)
+```
+reference/
+├── uk-companies-house-parsers-public/  # CH .dat fixed-width parsers
+├── register-ingester-psc/              # PSC bulk ingester (Ruby)
+├── companies-house-mcp/                # CH MCP server (TypeScript)
+├── companies-house-api-python-starter/ # CH API patterns (Python)
+└── uk-accounts-pipeline/               # iXBRL → financials (Python)
 ```
 reference/
 ├── uk-companies-house-parsers-public/  # CH .dat fixed-width parsers
