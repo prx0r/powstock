@@ -13,7 +13,7 @@ from typing import Any
 import httpx
 
 CH_BASE = "https://api.company-information.service.gov.uk"
-CH_API_KEY = "d284d51e"  # from powuk
+CH_API_KEY = "d284d51e-b98b-4517-861d-0f8b2273ceeb"  # from powuk
 
 
 @dataclass
@@ -39,6 +39,7 @@ class Officer:
     nationality: str
     country_of_residence: str
     source: str = "companies_house"
+    raw: dict = field(default_factory=dict)
 
 
 @dataclass

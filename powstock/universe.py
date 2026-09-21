@@ -112,31 +112,34 @@ BY_TICKER: dict[str, Security] = {s.ticker: s for s in UNIVERSE}
 LIQUID = [s for s in UNIVERSE if s.dataset == "liquid"]
 CONSTRAINT = [s for s in UNIVERSE if s.dataset == "constraint"]
 
-# Stooq symbol mapping (add more as needed)
-STOOQ_SYMBOLS: dict[str, str] = {
-    "NG.": "ng.uk",
-    "SSE": "sse.uk",
-    "DRX": "drx.uk",
-    "CNA": "cna.uk",
-    "CCC": "ccc.uk",
-    "CORD": "cord.uk",
-    "BBOX": "bbox.uk",
-    "SGRO": "sgro.uk",
-    "RPI": "rpi.uk",
-    "CNC": "cnc.uk",
-    "IQE": "iqe.uk",
-    "XPP": "xpp.uk",
-    "VLX": "vlx.uk",
-    "TTG": "ttg.uk",
-    "DSCV": "dscv.uk",
-    "SOLI": "soli.uk",
-    "PRE": "pre.uk",
-    "TUN": "tun.uk",
-    "ALL": "all.uk",
-    "SML": "sml.uk",
-    "HE1": "he1.uk",
-    "RHL": "rhl.uk",
-    "CBTC": "cbtc.uk",
-    "IB1T": "ib1t.uk",
-    "BOLD": "bold.uk",
+# Yahoo Finance symbol mapping (.L suffix for LSE)
+YAHOO_SYMBOLS: dict[str, str] = {
+    "NG.": "NG.L",
+    "SSE": "SSE.L",
+    "DRX": "DRX.L",
+    "CNA": "CNA.L",
+    "CCC": "CCC.L",
+    "CORD": "CORD.L",
+    "BBOX": "BBOX.L",
+    "SGRO": "SGRO.L",
+    "RPI": "RPI.L",
+    "CNC": "CNC.L",
+    "IQE": "IQE.L",
+    "XPP": "XPP.L",
+    "VLX": "VLX.L",
+    "TTG": "TTG.L",
+    "DSCV": "DSCV.L",
+    "SOLI": "SOLI.L",
+    "PRE": "PRE.L",
+    "TUN": "TUN.L",
+    "ALL": "ALL.L",
+    "SML": "SML.L",
+    "HE1": "HE1.L",
+    "RHL": "RHL.L",
+    "CBTC": "CBTC.L",
+    "IB1T": "IB1T.L",
+    "BOLD": "BOLD.L",
 }
+
+# Backward compat alias
+STOOQ_SYMBOLS = YAHOO_SYMBOLS

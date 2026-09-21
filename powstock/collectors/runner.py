@@ -156,10 +156,10 @@ def _store_obs(conn: sqlite3.Connection, source: str, ticker: str, metric: str, 
 
 
 def run_prices(conn: sqlite3.Connection) -> int:
-    """Run Stooq price collector for all universe tickers."""
-    from powstock.collectors.stooq_prices import fetch_all_latest
+    """Run Yahoo Finance price collector for all universe tickers."""
+    from powstock.collectors.yahoo_prices import fetch_all_latest
 
-    print("Fetching prices from Stooq...")
+    print("Fetching prices from Yahoo Finance...")
     prices = fetch_all_latest()
     count = 0
 
