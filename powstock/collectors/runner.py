@@ -264,9 +264,9 @@ def run_rns(conn: sqlite3.Connection) -> int:
                 conn.execute(
                     "INSERT INTO rns_announcements (ticker, headline, category, published_at, source_url, rns_id, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
                     (ann["ticker"], ann["headline"], ann["category"], ann["published_at"],
-                     ann["source_url"], ann["rns_id"], datetime.now().isoformat()),
+                     ann["source_url"], ann.get("source_url", ""), datetime.now().isoformat()),
                 )
-                _store_obs(conn, "lse_rns", ann["ticker"], "rns_announcement", ann["headline"][:100])
+                _store_obs(conn, "investegate", ann["ticker"], "rns_announcement", ann["headline"][:100])
                 count += 1
 
             time.sleep(1)
