@@ -11,14 +11,27 @@ from typing import Any
 
 @dataclass
 class Person:
-    person_id: str  # Companies House officer_id or name hash
+    person_id: str  # Companies House person_number (preferred) or name hash
     name: str
-    roles: list[dict[str, Any]] = field(default_factory=list)
-    companies: list[str] = field(default_factory=list)  # company_numbers
+    title: str = ""
+    forenames: str = ""
+    surname: str = ""
+    honours: str = ""
+    date_of_birth: str = ""
+    partial_dob: str = ""
+    postcode: str = ""
+    address: str = ""
+    occupation: str = ""
     nationality: str = ""
     country_of_residence: str = ""
+    corporate_indicator: bool = False
+    roles: list[dict[str, Any]] = field(default_factory=list)
+    companies: list[str] = field(default_factory=list)
+    is_disqualified: bool = False
+    disqualifications: list[dict[str, Any]] = field(default_factory=list)
     first_seen: str = ""
     last_seen: str = ""
+    source: str = "api"
 
 
 @dataclass

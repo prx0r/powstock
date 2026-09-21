@@ -8,6 +8,8 @@ from powstock.collectors.companies_house import fetch_company_profile, fetch_uni
 from powstock.collectors.tracefour import fetch_uk_filings, fetch_clusters, fetch_streaks
 from powstock.collectors.psc_snapshot import fetch_universe_psc, summarise_psc
 from powstock.collectors.filing_events import fetch_universe_events, classify_filing, summarise_events
+from powstock.collectors.finnhub import fetch_insider_transactions, fetch_universe_insiders
+from powstock.collectors.ch_bulk_parsers import parse_appointments_file, parse_disqualifications_file
 from powstock.collectors.runner import init_db, run_all, status
 
 __all__ = [
@@ -30,6 +32,10 @@ __all__ = [
     "fetch_universe_events",
     "classify_filing",
     "summarise_events",
+    "fetch_insider_transactions",
+    "fetch_universe_insiders",
+    "parse_appointments_file",
+    "parse_disqualifications_file",
     "init_db",
     "run_all",
     "status",
