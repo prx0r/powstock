@@ -32,7 +32,7 @@ def test_export_nodes():
 
 def test_export_edges():
     from layer2.bridge import export_edges
-    from pow.canonical import canonical_id
+    from pow.canonical import content_id
     conn = _get_conn()
     if conn is None:
         return
@@ -40,8 +40,8 @@ def test_export_edges():
     assert len(edges) > 0
     for e in edges:
         assert e.relation == "REQUIRES"
-        cid = canonical_id(e)
-        assert len(cid) == 16
+        # Edge IDs are content-addressed via make_edge_id
+        assert e.id.startswith("edge:")
     conn.close()
 
 
