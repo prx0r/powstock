@@ -3,11 +3,19 @@
 Builds a director/person graph from Companies House data.
 When a director appears in multiple companies, we link them.
 This creates the "who knows what through which companies" network.
+
+Status: DEAD
+- Never imported by any module.
+- BUG: Uses httpx.Client() at line 191 without importing httpx.
+- Duplicates entity resolution that could be done via simple DB queries.
+- To revive: add "import httpx", wire into daily pipeline or standalone script.
 """
 
 import logging
 from dataclasses import dataclass, field
 from typing import Any
+
+import httpx
 
 log = logging.getLogger(__name__)
 

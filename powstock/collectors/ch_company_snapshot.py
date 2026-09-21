@@ -4,6 +4,13 @@ Downloads the full UK company population snapshot (~469 MB).
 Updated monthly. Contains every active/dissolved company.
 
 URL: https://download.companieshouse.gov.uk/
+
+Status: STALE
+- Registered in layer1/registry.py as "ch_company_snapshot_monthly" (enabled=True).
+- NOT called by runner.py run_all().
+- BUG: Line 30 references CH_Bulk_BASE (capital B) but constant is CH_BULK_BASE.
+  discover_company_snapshot_files() will crash with NameError.
+- To activate: fix the NameError, add run to runner.py.
 """
 
 import hashlib
@@ -27,7 +34,7 @@ def discover_company_snapshot_files() -> dict[str, Any]:
     """
     client = httpx.Client(timeout=30, follow_redirects=True)
     try:
-        resp = client.get(f"{CH_Bulk_BASE}/index.html")
+        resp = client.get(f"{CH_BULK_BASE}/index.html")
         resp.raise_for_status()
         # For now, we know the pattern — improve later with HTML parsing
         return {"files": [], "latest_date": datetime.now().strftime("%Y-%m")}

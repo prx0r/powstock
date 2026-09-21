@@ -180,7 +180,7 @@ def lookup_ticker_short(
     For now, searches by issuer name containing the ticker company name.
     """
     if positions is None:
-        positions = fetch_current_short_positions()
+        positions, _raw_bytes = fetch_current_short_positions()
 
     # Try exact ISIN match first (if ticker is actually an ISIN)
     for pos in positions:

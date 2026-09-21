@@ -2,6 +2,14 @@
 
 Free, no API key. Fetches daily OHLCV from stooq.com.
 Reuses the pattern from fish/fish/services/prices.py.
+
+Status: STALE
+- Registered in layer1/registry.py as "stooq_prices" but DISABLED (enabled=False).
+- Imported by powstock/collectors/__init__.py.
+- NOT called by runner.py run_all().
+- Deliberately disabled: yahoo_prices.py is the primary price source.
+- Functionally duplicated by yahoo_prices.py (both fetch OHLCV).
+- To activate only if Yahoo becomes unavailable.
 """
 
 import csv

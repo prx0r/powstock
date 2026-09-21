@@ -8,6 +8,14 @@ Fields:
 - company_number: Companies House number
 - isin: ISIN
 - lei: LEI (empty if not assigned)
+
+Status: DEAD
+- Never imported by any module.
+- Duplicates identical data already in powstock/universe.py (UNIVERSE list with
+  company_number, isin, lei fields). universe.py is the single source of truth.
+- To revive: only if entity data needs to diverge from universe.py (e.g. historical
+  mappings that change over time).
+"""
 - company_name: canonical name
 - verified: True if manually verified
 """

@@ -196,8 +196,8 @@ def run_prices(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = 
             "INSERT OR REPLACE INTO price_daily (ticker, date, open, high, low, close, volume) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (ticker, data["asof"], data["open"], data["high"], data["low"], data["price"], data["volume"]),
         )
-        _store_obs(conn, "stooq", ticker, "price", data["price"], "GBP")
-        _store_obs(conn, "stooq", ticker, "pct_1d", data["pct_1d"], "percent")
+        _store_obs(conn, "yahoo_finance", ticker, "price", data["price"], "GBP")
+        _store_obs(conn, "yahoo_finance", ticker, "pct_1d", data["pct_1d"], "percent")
         count += 1
 
     # Store raw JSON bytes (not parsed dict)
@@ -211,8 +211,8 @@ def run_prices(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = 
         )
 
     conn.execute(
-        "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='stooq'), 0) + 1)",
-        ("stooq", datetime.now().isoformat(), count),
+        "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='yahoo_finance'), 0) + 1)",
+        ("yahoo_finance", datetime.now().isoformat(), count),
     )
 
     print(f"  Prices: {count} tickers updated")

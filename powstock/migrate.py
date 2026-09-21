@@ -4,6 +4,13 @@ Adds missing columns and tables to existing databases.
 Safe to run multiple times (idempotent).
 
 Usage: python -m powstock.migrate
+
+Status: STALE
+- Never imported by any module.
+- No Makefile target references it.
+- Designed for standalone execution only.
+- Useful when schema changes are needed on existing DBs.
+- To use: python -m powstock.migrate (from repo root).
 """
 
 import sqlite3

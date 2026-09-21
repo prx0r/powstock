@@ -4,6 +4,12 @@ Downloads and archives daily/monthly XBRL accounts bulk files.
 These contain structured financial data for UK companies.
 
 URL: https://download.companieshouse.gov.uk/
+
+Status: STALE
+- Registered in layer1/registry.py as "ch_accounts_bulk" (enabled=True).
+- NOT called by runner.py run_all().
+- No missing dependencies (uses httpx which is installed).
+- To activate: add run_accounts_bulk() call to runner.py run_all().
 """
 
 import hashlib

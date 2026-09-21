@@ -4,6 +4,11 @@ Uses the official UK government tool to parse Companies House bulk XBRL accounts
 Produces 38 columns of normalised financial data per company.
 
 Reference: /root/powstock/reference/stream-read-xbrl
+
+Status: DEAD
+- Never imported by runner.py or any other module.
+- Missing dependency: stream-read-xbrl is not installed (pyproject.toml doesn't list it).
+- To revive: add "stream-read-xbrl" to pyproject.toml dependencies and wire into runner.py.
 """
 
 from datetime import datetime, date

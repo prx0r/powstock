@@ -6,6 +6,14 @@ Endpoints:
   GET /v1/filings — SEC Form 4 (also has UK via ticker filter)
   GET /v1/clusters — cluster buys (3+ insiders same direction)
   GET /v1/streaks — consecutive buying streaks
+
+Status: STALE
+- Registered in layer1/registry.py as "tracefour" (enabled=True).
+- NOT imported by powstock/collectors/__init__.py.
+- NOT called by runner.py run_all().
+- This is the PREFERRED source for UK insider data (structured, free, cluster/streak endpoints).
+- BLOCKER: Needs TRACEFOUR_API_KEY in .env (sign up at tracefour.com, free).
+- To activate: get API key, add to runner.py, replace Investegate PDMR as primary source.
 """
 
 import time

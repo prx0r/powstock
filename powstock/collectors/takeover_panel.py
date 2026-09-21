@@ -5,6 +5,13 @@ positions and dealings under Rule 8.3. The Panel publishes disclosure tables in
 web, XLS, CSV, XML formats.
 
 URL: https://www.thetakeoverpanel.org.uk/disclosure
+
+Status: STALE
+- Registered in layer1/registry.py as "takeover_panel" (enabled=True).
+- Imported by powstock/collectors/__init__.py.
+- Tested in tests/test_collectors.py (integration test).
+- NOT called by runner.py run_all().
+- To activate: add to runner.py run_all().
 """
 
 import hashlib

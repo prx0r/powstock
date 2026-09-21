@@ -6,6 +6,14 @@ structured schema/API with metadata including issuer names, LEIs, and categories
 This is the canonical regulatory tape. Investegate is a mirror/backup.
 
 URL: https://www.fca.org.uk/markets/primary-markets/regulatory-disclosures/national-storage-mechanism
+
+Status: STALE
+- Registered in layer1/registry.py as "fca_nsm" (enabled=True).
+- Tested in tests/test_collectors.py (integration test).
+- NOT imported by powstock/collectors/__init__.py.
+- NOT called by runner.py run_all().
+- Currently returns empty list (may need auth or different endpoint).
+- To activate: verify API access, add to runner.py.
 """
 
 import hashlib

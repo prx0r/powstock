@@ -6,6 +6,12 @@ Parses fixed-width .dat files for:
 - Product 195: Disqualified Directors (persons + disqualifications)
 
 These are the bulk datasets available from Companies House on request.
+
+Status: DEAD
+- Never imported by any module.
+- Not registered in layer1/registry.py.
+- Not tested.
+- To revive: register in registry.py, wire into runner.py, add tests.
 """
 
 from dataclasses import dataclass, field

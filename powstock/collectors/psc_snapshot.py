@@ -13,6 +13,14 @@ As of September 2026, PSC snapshots are split into 32 parts:
 
 There is also a single combined file:
   persons-with-significant-control-snapshot-2026-09-21.zip
+
+Status: STALE
+- Registered in layer1/registry.py as "psc_snapshot" (enabled=True).
+- Imported by powstock/collectors/__init__.py (download_psc_snapshot, fetch_universe_psc).
+- Tested in tests/test_collectors.py (integration test).
+- NOT called by runner.py run_all().
+- Note: fetch_universe_psc() duplicates fetch_company_psc() in companies_house.py.
+- To activate: add to runner.py run_all().
 """
 
 import hashlib

@@ -6,6 +6,13 @@ Every source must answer:
 3. DATA HEALTH — does today's artifact resemble a plausible dataset?
 
 This is where manifests become genuinely powerful.
+
+Status: STALE
+- Never imported by any module.
+- Only reachable via Makefile `make health` target.
+- Requires source manifests in layer1/sources/*/manifest.yaml (14 exist).
+- Would be useful for operational monitoring once pipeline is running daily.
+- To use: make health or python -c "from layer1.health import check_all_health, print_health_report; print_health_report(check_all_health())"
 """
 
 from __future__ import annotations

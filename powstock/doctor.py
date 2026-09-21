@@ -1,6 +1,13 @@
 """powstock doctor — auto-status of all data sources.
 
 Run: python -m powstock.doctor
+
+Status: STALE
+- Never imported by any module.
+- Only reachable via Makefile `make doctor` target.
+- Hardcodes Path("data/powstock.db").
+- Superseded by layer1/health.py which has 3-level health monitoring.
+- To use: make doctor or python -m powstock.doctor.
 """
 
 import sys
