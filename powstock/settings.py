@@ -18,7 +18,7 @@ class Settings(BaseSettings):
     r2_endpoint: str = "https://954612afb5a97bb15dddcdc70176813d.r2.cloudflarestorage.com"
     r2_bucket: str = "powstock-garden"
 
-    model_config = {"env_prefix": "POWSTOCK_"}
+    model_config = {"env_prefix": "POWSTOCK_", "env_file": ".env"}
 
 
 _settings = None

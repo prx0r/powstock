@@ -31,10 +31,11 @@ def backfill_prices(conn: sqlite3.Connection, days: int = 365) -> dict[str, int]
             for row in rows:
                 conn.execute(
                     """INSERT OR REPLACE INTO price_daily
-                       (ticker, date, open, high, low, close, volume)
-                       VALUES (?, ?, ?, ?, ?, ?, ?)""",
+                       (ticker, date, open, high, low, close, volume, observed_at)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
                     (ticker, row["date"], row["open"], row["high"],
-                     row["low"], row["close"], row["volume"]),
+                     row["low"], row["close"], row["volume"],
+                     datetime.now().isoformat()),
                 )
                 count += 1
 
