@@ -4,20 +4,23 @@
 - [x] Universe defined (25 securities)
 - [x] Causal graph mapped
 - [x] Source registry created
-- [x] Price collector (Stooq)
-- [x] Insider dealing collector (FCA PDMR)
-- [x] Short interest collector (FCA ANSP)
-- [x] RNS announcement collector (LSE/FCA)
-- [x] Companies House collector (REST API)
+- [x] Price collector (Yahoo Finance — works, 24/25 tickers)
+- [x] Insider dealing collector (FCA PDMR — code ready, needs live test)
+- [x] Short interest collector (FCA ANSP — code ready, needs live test)
+- [x] RNS announcement collector (LSE/FCA — code ready, needs live test)
+- [x] Companies House collector (REST API — works, tested with NG., SSE, DRX)
 - [x] Unified runner with SQLite storage
 
+## In Progress
+- [ ] Test FCA PDMR collector on live data
+- [ ] Test FCA short interest collector on live data
+- [ ] Test RNS collector on live data
+- [ ] Build ticker→ISIN mapping (for short interest matching)
+
 ## Next
-- [ ] Test collectors on live data
-- [ ] Add ticker→ISIN mapping (OpenFIGI or manual)
+- [ ] Companies House financial extraction (XBRL/iXBRL parsing)
 - [ ] Build signal framework (z-scored, versioned, provenance)
 - [ ] Build daily state builder
-- [ ] Companies House financial extraction (XBRL/iXBRL)
-- [ ] Yahoo Finance fallback for prices
 - [ ] Physical-reasoning compiler
 
 ## Later

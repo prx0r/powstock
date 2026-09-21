@@ -1,7 +1,7 @@
 """FCA short interest (ANSP) collector.
 
 Downloads the daily aggregated net short position report from FCA.
-Free, no API key. CSV format.
+Free, no API key. XLSX format (CSV no longer available).
 """
 
 import csv
@@ -12,7 +12,8 @@ from typing import Any
 
 import httpx
 
-FCA_ANSP_URL = "https://www.fca.org.uk/publication/documents/aggregated-net-short-positions.csv"
+# FCA changed from CSV to XLSX format
+FCA_ANSP_URL = "https://www.fca.org.uk/publication/documents/aggregated-net-short-positions.xlsx"
 FCA_ANSP_HISTORIC_URL = "https://www.fca.org.uk/publication/documents/aggregated-historic-net-short-positions.csv"
 
 
@@ -27,22 +28,81 @@ class ShortPosition:
 
 
 def fetch_current_short_positions() -> list[ShortPosition]:
-    """Download the current aggregated net short positions CSV from FCA.
+    """Download the current aggregated net short positions from FCA.
 
     Returns list of ShortPosition records for all UK shares with >0.2% short.
+    Now uses XLSX format (CSV no longer available).
     """
     client = httpx.Client(timeout=30)
     try:
         resp = client.get(FCA_ANSP_URL)
         resp.raise_for_status()
 
+        # Try to parse as XLSX first
+        if resp.headers.get("content-type", "").startswith("application/vnd.openxmlformats"):
+            try:
+                import openpyxl
+                import io
+
+                wb = openpyxl.load_workbook(io.BytesIO(resp.content))
+                ws = wb.active
+
+                # Find header row (contains "ISIN" or "Name of Company")
+                header_row = None
+                for i, row in enumerate(ws.iter_rows(max_row=10, values_only=True)):
+                    row_str = " ".join(str(c) for c in row if c)
+                    if "ISIN" in row_str.upper() or "NAME OF COMPANY" in row_str.upper():
+                        header_row = i
+                        break
+
+                if header_row is None:
+                    return []
+
+                # Data starts 2 rows after header (skip empty row)
+                data_start = header_row + 2
+                positions = []
+
+                for row in ws.iter_rows(min_row=data_start, values_only=True):
+                    try:
+                        # Expected columns: Name, ISIN, Position %, Date
+                        if not row[0] or not row[1]:
+                            continue
+
+                        name = str(row[0]).strip()
+                        isin = str(row[1]).strip()
+                        
+                        # Position percentage
+                        pct = 0.0
+                        if len(row) > 2:
+                            if isinstance(row[2], (int, float)):
+                                pct = float(row[2])
+                            elif row[2]:
+                                pct = float(str(row[2]).replace("%", "").replace(",", ""))
+
+                        if not isin or isin == "None":
+                            continue
+
+                        positions.append(ShortPosition(
+                            isin=isin,
+                            issuer_name=name,
+                            position_pct=pct,
+                            notional_value_gbp=0.0,  # Not in this file format
+                            report_date=datetime.now().strftime("%Y-%m-%d"),
+                        ))
+                    except (ValueError, KeyError, TypeError, IndexError):
+                        continue
+
+                return positions
+
+            except ImportError:
+                pass  # Fall back to CSV parsing
+
+        # Fallback: try CSV format (historic data)
         reader = csv.DictReader(io.StringIO(resp.text))
         positions = []
 
         for row in reader:
             try:
-                # CSV columns vary but typically include:
-                # ISIN, Issuer Name, Position (%), Notional Value
                 isin = row.get("ISIN", "").strip()
                 issuer = row.get("Issuer Name", row.get("Issuer", "")).strip()
                 pct_str = row.get("Position (%)", row.get("Position", "0")).strip()
