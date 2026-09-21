@@ -10,42 +10,14 @@ from typing import Any
 
 import httpx
 
+from powstock.universe import YAHOO_SYMBOLS
+
 log = logging.getLogger(__name__)
 
 YAHOO_BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
 CACHE_TTL_S = 15 * 60
 _cache: dict[str, tuple[float, list[dict]]] = {}
 _client: httpx.Client | None = None
-
-# Yahoo Finance symbol mapping for UK stocks
-# .L suffix works for both Main Market and AIM
-YAHOO_SYMBOLS: dict[str, str] = {
-    "NG.": "NG.L",
-    "SSE": "SSE.L",
-    "DRX": "DRX.L",
-    "CNA": "CNA.L",
-    "CCC": "CCC.L",
-    "CORD": "CORD.L",
-    "BBOX": "BBOX.L",
-    "SGRO": "SGRO.L",
-    "RPI": "RPI.L",
-    "CNC": "CNC.L",
-    "IQE": "IQE.L",
-    "XPP": "XPP.L",
-    "VLX": "VLX.L",
-    "TTG": "TTG.L",
-    "DSCV": "DSCV.L",
-    "SOLI": "SOLI.L",
-    "PRE": "PRE.L",
-    "TUN": "TUN.L",
-    "ALL": "ALL.L",
-    "SML": "SML.L",
-    "HE1": "HE1.L",
-    "RHL": "RHL.L",
-    "CBTC": "CBTC.L",
-    "IB1T": "IB1T.L",
-    "BOLD": "BOLD.L",
-}
 
 
 def _get_client() -> httpx.Client:

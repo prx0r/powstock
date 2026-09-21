@@ -150,3 +150,60 @@ def test_replay_from_raw():
         assert ids_before == ids_after, f"Event ID mismatch: {ids_after} != {ids_before}"
 
         conn.close()
+
+
+def test_rns_parser_replay():
+    """RNS parser must produce identical output from identical HTML input."""
+    from powstock.collectors.rns_announcements import _parse_investegate_html
+
+    # Fetch real HTML from Investegate
+    from powstock.collectors.rns_announcements import fetch_investegate_page
+    html = fetch_investegate_page(ticker="NG.", page=1)
+
+    # Parse twice — must be identical
+    result1 = _parse_investegate_html(html, ticker_filter="NG.")
+    result2 = _parse_investegate_html(html, ticker_filter="NG.")
+
+    assert len(result1) == len(result2), f"Parse count mismatch: {len(result1)} != {len(result2)}"
+    assert len(result1) > 0, "No announcements parsed"
+
+    for a1, a2 in zip(result1, result2):
+        assert a1.ticker == a2.ticker
+        assert a1.headline == a2.headline
+        assert a1.category == a2.category
+        assert a1.source_url == a2.source_url
+
+
+def test_pdmr_parser_replay():
+    """PDMR parser must produce identical output from identical HTML input."""
+    from powstock.collectors.fca_pdmr import _parse_pdmr_notification
+
+    # Use existing fixture
+    fixture_path = Path(__file__).parent / "fixtures" / "rns" / "pdmr_purchase_single.html"
+    if fixture_path.exists():
+        html = fixture_path.read_text()
+
+        # Parse twice — must be identical
+        result1 = _parse_pdmr_notification(html, "TEST", "Test Co", "http://test.com")
+        result2 = _parse_pdmr_notification(html, "TEST", "Test Co", "http://test.com")
+
+        assert len(result1) == len(result2), f"Parse count mismatch: {len(result1)} != {len(result2)}"
+        if result1:
+            d1, d2 = result1[0], result2[0]
+            assert d1.director_name == d2.director_name
+            assert d1.transaction_type == d2.transaction_type
+            assert d1.price == d2.price
+
+
+def test_price_collector_replay():
+    """Price collector must produce identical output from identical API response."""
+    from powstock.collectors.yahoo_prices import fetch_latest
+
+    # Fetch twice — should be cached and identical
+    result1 = fetch_latest("NG.")
+    result2 = fetch_latest("NG.")
+
+    assert result1 is not None, "First fetch returned None"
+    assert result2 is not None, "Second fetch returned None"
+    assert result1["price"] == result2["price"], "Price mismatch between cached fetches"
+    assert result1["asof"] == result2["asof"], "Date mismatch between cached fetches"

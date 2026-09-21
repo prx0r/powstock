@@ -78,7 +78,7 @@ Every UK data source we can use. What it provides, how to access it, cost, forma
   - `GET /company/{number}/insolvency` — insolvency records
   - `GET /officers/{officer_id}/appointments` — all companies an officer serves
 - **Use**: Company fundamentals, director networks, charge tracking
-- **Note**: powuk already has SDK with key `d284d51e...`
+- **Note**: Set `POWSTOCK_COMPANIES_HOUSE_API_KEY` in `.env`
 
 ### Companies House Streaming API
 - **URL**: `https://stream.companieshouse.gov.uk/companies`
@@ -88,7 +88,7 @@ Every UK data source we can use. What it provides, how to access it, cost, forma
 - **Auth**: HTTP Basic (streaming key as username)
 - **Events**: company changes, filings, officer changes, insolvency, charges, PSC changes
 - **Use**: Real-time company events feed
-- **Note**: powuk already has SDK with key `0aa57ba1...`
+- **Note**: Set `POWSTOCK_COMPANIES_HOUSE_API_KEY` in `.env` (separate streaming key)
 
 ### OpenFIGI
 - **URL**: `https://api.openfigi.com/v3/`
@@ -109,7 +109,7 @@ Every UK data source we can use. What it provides, how to access it, cost, forma
 - **Format**: JSON REST
 - **Cost**: Free (API key required)
 - **Auth**: HTTP Basic (API key as username)
-- **Key**: `d284d51e-b98b-4517-861d-0f8b2273ceeb`
+- **Key**: Set `POWSTOCK_COMPANIES_HOUSE_API_KEY` in `.env`
 - **Rate limit**: 600 requests per 5 minutes
 - **Status**: ✅ WORKING — tested with National Grid, SSE, Drax
 - **Key endpoints**:
@@ -125,7 +125,7 @@ Every UK data source we can use. What it provides, how to access it, cost, forma
 - **URL**: `https://stream.companieshouse.gov.uk/companies`
 - **Format**: SSE (Server-Sent Events)
 - **Cost**: Free (separate API key)
-- **Key**: `0aa57ba1-9f9a-4e5b-a45f-0e69b56a71ad`
+- **Key**: Set `POWSTOCK_COMPANIES_HOUSE_STREAMING_KEY` in `.env`
 - **Rate limit**: Max 2 concurrent connections
 - **Events**: company changes, filings, officer changes, insolvency, charges, PSC changes
 - **Use**: Real-time company events feed

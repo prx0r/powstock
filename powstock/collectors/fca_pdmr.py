@@ -41,6 +41,9 @@ class PDMRDeal:
     lei: str
     source: str = "investegate_rns"
     parsed_at: str = field(default_factory=lambda: datetime.now().isoformat())
+    group_shares: int | None = None  # total for multi-director notifications
+    group_value: float | None = None  # total for multi-director notifications
+    parse_status: str = "complete"  # complete or partial
 
 
 def _clean_html(text: str) -> str:
@@ -150,6 +153,9 @@ def _parse_pdmr_notification(html: str, ticker: str, company_name: str, url: str
                             venue="Toronto Stock Exchange" if "Toronto" in summary_text else "London Stock Exchange",
                             notification_url=url,
                             lei="",
+                            group_shares=total_shares if total_shares else None,
+                            group_value=(price * total_shares) if price and total_shares else None,
+                            parse_status="partial" if not total_shares else "complete",
                         ))
             elif total_shares > 0:
                 # Single director or couldn't parse names

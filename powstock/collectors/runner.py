@@ -124,6 +124,9 @@ def init_db(db_path: Path | None = None) -> sqlite3.Connection:
             published_at TEXT,
             observed_at TEXT NOT NULL,
             source_url TEXT,
+            group_shares INTEGER,
+            group_value REAL,
+            parse_status TEXT DEFAULT 'complete',
             UNIQUE(ticker, director, effective_at, action, source_url)
         );
 
@@ -172,43 +175,6 @@ def init_db(db_path: Path | None = None) -> sqlite3.Connection:
     return conn
 
 
-def _store_raw(
-    conn: sqlite3.Connection,
-    source: str,
-    dataset: str,
-    data: Any,
-    raw_bytes: bytes | None = None,
-    source_url: str = "",
-) -> Path:
-    """Store raw data to disk and record in database.
-
-    If raw_bytes is provided, stores the original bytes.
-    Otherwise serializes data to JSON (legacy behavior).
-    """
-    store = ArtifactStore(base_dir=RAW_DIR, conn=conn)
-
-    if raw_bytes is not None:
-        # Store original bytes — the correct Level 1 path
-        artifact = store.put_http_response(
-            content=raw_bytes,
-            source=source,
-            dataset=dataset,
-            source_url=source_url,
-        )
-        return Path(artifact["storage_uri"])
-    else:
-        # Legacy: serialize parsed data to JSON
-        # TODO: migrate callers to pass raw_bytes
-        json_bytes = json.dumps(data, indent=2, default=str).encode()
-        artifact = store.put_bytes(
-            data=json_bytes,
-            source=source,
-            dataset=dataset,
-            metadata={"note": "serialized from parsed data"},
-        )
-        return Path(artifact["storage_uri"])
-
-
 def _store_obs(conn: sqlite3.Connection, source: str, ticker: str, metric: str, value: Any, unit: str = ""):
     """Store an observation metric."""
     conn.execute(
@@ -217,7 +183,7 @@ def _store_obs(conn: sqlite3.Connection, source: str, ticker: str, metric: str, 
     )
 
 
-def run_prices(conn: sqlite3.Connection) -> int:
+def run_prices(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
     """Run Yahoo Finance price collector for all universe tickers."""
     from powstock.collectors.yahoo_prices import fetch_all_latest
 
@@ -234,7 +200,16 @@ def run_prices(conn: sqlite3.Connection) -> int:
         _store_obs(conn, "stooq", ticker, "pct_1d", data["pct_1d"], "percent")
         count += 1
 
-    _store_raw(conn, "stooq", "prices", prices)
+    # Store raw JSON bytes (not parsed dict)
+    if artifact_store and prices:
+        raw_bytes = json.dumps(prices, indent=2, default=str).encode()
+        artifact_store.put_bytes(
+            data=raw_bytes,
+            source="yahoo_finance",
+            dataset="latest_prices",
+            source_url="https://query1.finance.yahoo.com/v8/finance/chart",
+        )
+
     conn.execute(
         "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='stooq'), 0) + 1)",
         ("stooq", datetime.now().isoformat(), count),
@@ -263,6 +238,7 @@ def run_insiders(conn: sqlite3.Connection, artifact_store: ArtifactStore | None 
                 source_url=art["source_url"],
                 metadata={"ticker": art["ticker"]},
             )
+
     count = 0
 
     for deal in deals:
@@ -277,20 +253,23 @@ def run_insiders(conn: sqlite3.Connection, artifact_store: ArtifactStore | None 
             conn.execute(
                 """INSERT OR REPLACE INTO insider_deals
                    (event_id, ticker, company, director, position, action, price, shares, value,
-                    effective_at, published_at, observed_at, source_url)
-                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                    effective_at, published_at, observed_at, source_url,
+                    group_shares, group_value, parse_status)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
                 (event_id, deal["ticker"], deal["company"], deal["director"],
                  deal["position"], deal["transaction_type"], deal["price"],
                  deal["shares"], deal["total_value"],
                  deal["trade_date"], deal.get("filing_date", ""),
-                 datetime.now().isoformat(), deal.get("url", "")),
+                 datetime.now().isoformat(), deal.get("url", ""),
+                 deal.get("group_shares"), deal.get("group_value"),
+                 deal.get("parse_status", "complete")),
             )
             _store_obs(conn, "investegate", deal["ticker"], "insider_deal", deal["transaction_type"])
             count += 1
         except Exception as e:
             log.warning("PDMR insert failed for %s: %s", deal.get("ticker", "?"), e)
 
-    _store_raw(conn, "fca_pdmr", "notifications", {"count": count})
+    # Raw artifacts already stored via artifact_store above — no summary store needed
     conn.execute(
         "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='fca_pdmr'), 0) + 1)",
         ("fca_pdmr", datetime.now().isoformat(), count),
@@ -344,7 +323,7 @@ def run_short_interest(conn: sqlite3.Connection, artifact_store: ArtifactStore |
             _store_obs(conn, "fca_ansp", ticker, "short_pct", pos.position_pct, "percent")
         count += 1
 
-    _store_raw(conn, "fca_ansp", "short_positions", {"count": count})
+    # Raw bytes already stored via artifact_store above — no summary store needed
     conn.execute(
         "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='fca_ansp'), 0) + 1)",
         ("fca_ansp", datetime.now().isoformat(), count),
@@ -354,21 +333,36 @@ def run_short_interest(conn: sqlite3.Connection, artifact_store: ArtifactStore |
     return count
 
 
-def run_rns(conn: sqlite3.Connection) -> int:
-    """Run RNS announcement collector for universe tickers."""
-    from powstock.collectors.rns_announcements import fetch_ticker_rns
+def run_rns(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
+    """Run RNS announcement collector for universe tickers.
+
+    Uses Investegate direct company pages (one per ticker).
+    """
+    from powstock.collectors.rns_announcements import fetch_investegate_page, _parse_investegate_html
+    from powstock.universe import UNIVERSE
 
     print("Fetching RNS announcements...")
     count = 0
 
     for security in UNIVERSE:
         try:
-            announcements = fetch_ticker_rns(security.ticker, max_pages=2)
+            # Fetch raw HTML from direct company page
+            html = fetch_investegate_page(ticker=security.ticker, page=1)
+            if artifact_store and html:
+                artifact_store.put_bytes(
+                    data=html.encode(),
+                    source="investegate_rns",
+                    dataset=f"company_{security.ticker}",
+                    source_url=f"https://www.investegate.co.uk/company/{security.ticker}",
+                    metadata={"ticker": security.ticker},
+                )
+
+            announcements = _parse_investegate_html(html, ticker_filter=security.ticker)
             for ann in announcements:
                 # Deterministic event_id
                 import hashlib as _hl
                 event_id = _hl.sha256(
-                    f"{ann['ticker']}|{ann['source_url']}".encode()
+                    f"{security.ticker}|{ann.source_url}".encode()
                 ).hexdigest()[:16]
 
                 conn.execute(
@@ -376,18 +370,17 @@ def run_rns(conn: sqlite3.Connection) -> int:
                        (event_id, ticker, headline, category, effective_at, published_at,
                         observed_at, source_url)
                        VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
-                    (event_id, ann["ticker"], ann["headline"], ann["category"],
-                     ann["published_at"], ann["published_at"],
-                     datetime.now().isoformat(), ann["source_url"]),
+                    (event_id, security.ticker, ann.headline, ann.category,
+                     ann.published_at, ann.published_at,
+                     datetime.now().isoformat(), ann.source_url),
                 )
-                _store_obs(conn, "investegate", ann["ticker"], "rns_announcement", ann["headline"][:100])
+                _store_obs(conn, "investegate", security.ticker, "rns_announcement", ann.headline[:100])
                 count += 1
 
-            time.sleep(1)
+            time.sleep(0.5)
         except Exception as e:
             log.warning("RNS fetch failed for %s: %s", security.ticker, e)
 
-    _store_raw(conn, "lse_rns", "announcements", {"count": count})
     conn.execute(
         "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='lse_rns'), 0) + 1)",
         ("lse_rns", datetime.now().isoformat(), count),
@@ -397,7 +390,7 @@ def run_rns(conn: sqlite3.Connection) -> int:
     return count
 
 
-def run_companies(conn: sqlite3.Connection) -> int:
+def run_companies(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
     """Run Companies House collector for universe tickers."""
     from powstock.collectors.companies_house import fetch_universe_companies
 
@@ -420,7 +413,16 @@ def run_companies(conn: sqlite3.Connection) -> int:
         _store_obs(conn, "companies_house", ticker, "charges_count", data["charges_count"])
         count += 1
 
-    _store_raw(conn, "companies_house", "profiles", companies)
+    # Store raw JSON bytes (not parsed dict)
+    if artifact_store and companies:
+        raw_bytes = json.dumps(companies, indent=2, default=str).encode()
+        artifact_store.put_bytes(
+            data=raw_bytes,
+            source="companies_house",
+            dataset="universe_profiles",
+            source_url="https://api.company-information.service.gov.uk",
+        )
+
     conn.execute(
         "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='companies_house'), 0) + 1)",
         ("companies_house", datetime.now().isoformat(), count),
@@ -430,7 +432,7 @@ def run_companies(conn: sqlite3.Connection) -> int:
     return count
 
 
-def run_finnhub(conn: sqlite3.Connection) -> int:
+def run_finnhub(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
     """Run Finnhub insider collector (optional, requires API key)."""
     from powstock.settings import get_settings
     api_key = get_settings().llm_api_key  # reuse a key slot or add FINNHUB_API_KEY
@@ -444,7 +446,16 @@ def run_finnhub(conn: sqlite3.Connection) -> int:
     results = fetch_universe_insiders(api_key=api_key)
     count = sum(len(v) for v in results.values())
 
-    _store_raw(conn, "finnhub", "insider_transactions", results)
+    # Store raw JSON bytes
+    if artifact_store and results:
+        raw_bytes = json.dumps(results, indent=2, default=str).encode()
+        artifact_store.put_bytes(
+            data=raw_bytes,
+            source="finnhub",
+            dataset="insider_transactions",
+            source_url="https://finnhub.io/api/v1",
+        )
+
     conn.execute(
         "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='finnhub'), 0) + 1)",
         ("finnhub", datetime.now().isoformat(), count),
@@ -474,7 +485,7 @@ def run_all(conn: sqlite3.Connection | None = None) -> dict[str, int]:
 
     # Run collectors (prices first, then others)
     try:
-        results["prices"] = run_prices(conn)
+        results["prices"] = run_prices(conn, artifact_store)
     except Exception as e:
         log.error("prices collector failed: %s", e)
         results["prices"] = 0
@@ -492,20 +503,20 @@ def run_all(conn: sqlite3.Connection | None = None) -> dict[str, int]:
         results["short_interest"] = 0
 
     try:
-        results["rns"] = run_rns(conn)
+        results["rns"] = run_rns(conn, artifact_store)
     except Exception as e:
         log.error("rns collector failed: %s", e)
         results["rns"] = 0
 
     try:
-        results["companies"] = run_companies(conn)
+        results["companies"] = run_companies(conn, artifact_store)
     except Exception as e:
         log.error("companies collector failed: %s", e)
         results["companies"] = 0
 
     # Optional collectors (require API keys)
     try:
-        results["finnhub"] = run_finnhub(conn)
+        results["finnhub"] = run_finnhub(conn, artifact_store)
     except Exception as e:
         log.error("finnhub collector failed: %s", e)
         results["finnhub"] = 0

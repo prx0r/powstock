@@ -38,6 +38,9 @@ def _parse_investegate_html(html: str, ticker_filter: str | None = None) -> list
     - Source (td with RNS/PRN/EQS)
     - Company (td with link containing "Company Name (TICKER)")
     - Headline (td with announcement link)
+
+    On direct company pages, the company link is not in each row,
+    so we use the ticker_filter as the known ticker.
     """
     announcements = []
 
@@ -45,27 +48,7 @@ def _parse_investegate_html(html: str, ticker_filter: str | None = None) -> list
     rows = re.findall(r'<tr[^>]*>(.*?)</tr>', html, re.DOTALL)
 
     for row in rows:
-        # Look for announcement rows - they have company links and announcement links
-        # Pattern: <a href="...company/TICKER">Company Name (TICKER)</a>
-        # and: <a class="announcement-link" href="...">Headline</a>
-
-        # Extract company name and ticker
-        company_match = re.search(r'href="https://www\.investegate\.ai/company/([^"]+)"[^>]*>([^<]+)\(([A-Z0-9.]+)\)</a>', row)
-        if not company_match:
-            # Try alternate pattern
-            company_match = re.search(r'href="https://www\.investegate\.co\.uk/company/([^"]+)"[^>]*>([^<]+)\(([A-Z0-9.]+)\)</a>', row)
-
-        if not company_match:
-            continue
-
-        ticker = company_match.group(3).strip()
-        company_name = company_match.group(2).strip()
-
-        # Filter by ticker if specified
-        if ticker_filter and ticker.upper() != ticker_filter.upper():
-            continue
-
-        # Extract headline
+        # Look for announcement rows - they have announcement links
         headline_match = re.search(r'class="announcement-link"[^>]*>(.*?)</a>', row, re.DOTALL)
         if not headline_match:
             continue
@@ -79,7 +62,7 @@ def _parse_investegate_html(html: str, ticker_filter: str | None = None) -> list
             category = re.sub(r'<[^>]+>', '', source_match.group(2)).strip()
 
         # Extract time
-        time_match = re.search(r'<td>(\d{1,2}\s+\w+\s+\d{4}\s+\d{1,2}:\d{2}\s+[AP]M)</td>', row, re.DOTALL)
+        time_match = re.search(r'<td>(\d{1,2}\s+\w+\s+\d{4})</td>', row, re.DOTALL)
         published_at = ""
         if time_match:
             published_at = time_match.group(1).strip()
@@ -89,6 +72,40 @@ def _parse_investegate_html(html: str, ticker_filter: str | None = None) -> list
         source_url = ""
         if link_match:
             source_url = link_match.group(1)
+
+        # Extract ticker from company link if present (global feed)
+        ticker = ""
+        company_name = ""
+        company_match = re.search(r'href="https://www\.investegate\.ai/company/([^"]+)"[^>]*>([^<]+)\(([A-Z0-9.]+)\)</a>', row)
+        if not company_match:
+            company_match = re.search(r'href="https://www\.investegate\.co\.uk/company/([^"]+)"[^>]*>([^<]+)\(([A-Z0-9.]+)\)</a>', row)
+        if company_match:
+            ticker = company_match.group(3).strip()
+            company_name = company_match.group(2).strip()
+
+        # On direct company pages, extract ticker from announcement URL
+        if not ticker and source_url:
+            url_ticker_match = re.search(r'/announcement/rns/([^/]+)/', source_url)
+            if url_ticker_match:
+                slug = url_ticker_match.group(1)
+                # Extract ticker after last -- (e.g. "national-grid--ng." → "ng.")
+                parts = slug.split('--')
+                ticker = parts[-1].rstrip('.').upper()
+                # Restore trailing dot for tickers like NG.
+                if '.' in slug.split('--')[-1]:
+                    ticker = ticker + '.'
+
+        # Use filter as fallback
+        if not ticker and ticker_filter:
+            ticker = ticker_filter
+
+        # Filter by ticker if specified
+        if ticker_filter and ticker.upper() != ticker_filter.upper():
+            continue
+
+        # Skip if no ticker at all
+        if not ticker:
+            continue
 
         announcements.append(RNSAnnouncement(
             ticker=ticker,
@@ -111,8 +128,8 @@ def fetch_investegate_page(
     """Fetch a page of announcements from Investegate.
 
     Args:
-        ticker: Filter by specific TIDM. None = all.
-        page: Page number (1-indexed). Investegate uses 'page' param.
+        ticker: Company ticker for direct page. None = global feed.
+        page: Page number (1-indexed). Only used for global feed.
         page_size: Results per page (default 50).
     """
     client = httpx.Client(
@@ -122,13 +139,16 @@ def fetch_investegate_page(
     )
 
     try:
-        params: dict[str, Any] = {"searchtype": "3"}  # All companies
         if ticker:
-            params["search"] = ticker
-        if page > 1:
-            params["page"] = str(page)
+            # Direct company page — works reliably
+            resp = client.get(f"https://www.investegate.co.uk/company/{ticker}")
+        else:
+            # Global feed
+            params: dict[str, Any] = {"searchtype": "3"}
+            if page > 1:
+                params["page"] = str(page)
+            resp = client.get(INVESTEGATE_URL, params=params)
 
-        resp = client.get(INVESTEGATE_URL, params=params)
         resp.raise_for_status()
         return resp.text
     finally:
@@ -151,7 +171,9 @@ def fetch_rns_announcements(
     all_announcements = []
 
     for page in range(1, max_pages + 1):
-        html = fetch_investegate_page(ticker=ticker, page=page)
+        # Investegate doesn't support per-ticker filtering via URL params.
+        # Fetch global feed and filter by ticker after parsing.
+        html = fetch_investegate_page(ticker=None, page=page)
         announcements = _parse_investegate_html(html, ticker_filter=ticker)
         all_announcements.extend(announcements)
 
@@ -159,6 +181,43 @@ def fetch_rns_announcements(
             break
 
         time.sleep(1)  # respectful rate limiting
+
+    return all_announcements
+
+
+def fetch_universe_rns(
+    max_pages: int = 2,
+) -> list[RNSAnnouncement]:
+    """Fetch RNS announcements and match to universe tickers by company name.
+
+    Investegate doesn't support per-ticker search, so we:
+    1. Fetch the global feed
+    2. Match announcements to our universe by company name
+
+    Returns:
+        List of RNSAnnouncement records matched to universe tickers.
+    """
+    from powstock.universe import UNIVERSE
+
+    # Build company name lookup (lowercase)
+    name_to_ticker: dict[str, str] = {}
+    for security in UNIVERSE:
+        name_to_ticker[security.company.lower()] = security.ticker
+
+    all_announcements = []
+
+    for page in range(1, max_pages + 1):
+        html = fetch_investegate_page(ticker=None, page=page)
+        raw_announcements = _parse_investegate_html(html)
+
+        for ann in raw_announcements:
+            # Match by company name
+            company_lower = ann.company_name.lower().strip()
+            if company_lower in name_to_ticker:
+                ann.ticker = name_to_ticker[company_lower]
+                all_announcements.append(ann)
+
+        time.sleep(1)
 
     return all_announcements
 

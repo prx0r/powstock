@@ -31,7 +31,7 @@ Things that were blocked but now have free paths forward.
 - **Status**: ✅ FREE, API key required (register at developer.company-information.service.gov.uk)
 - **What**: Search companies, get officers, filing history, charges, PSC
 - **Rate**: 600 requests per 5 minutes
-- **We already have the key**: `d284d51e-b98b-4517-861d-0f8b2273ceeb`
+- **Key**: Set `POWSTOCK_COMPANIES_HOUSE_API_KEY` in `.env` (register at developer.company-information.service.gov.uk)
 
 ### US Insider Data → InsiderGraph (FREE)
 - **URL**: https://api.insidergraph.com/v1/ownership?tickers=NVDA

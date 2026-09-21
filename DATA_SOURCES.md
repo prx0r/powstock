@@ -13,7 +13,7 @@ What exists. What's missing. What needs building.
 - **Document API** — metadata + PDF download for filed accounts
 - **Streaming API** — real-time events for company changes, filings, officer changes, insolvency, charges, PSC changes
 - **Bulk data** — 849,999 companies already downloaded to `/root/ographuk/data/bulk/part1.db`
-- **API keys**: REST (`d284d51e...`), Streaming (`0aa57ba1...`)
+- **API keys**: Set `POWSTOCK_COMPANIES_HOUSE_API_KEY` in `.env`
 
 ### UK Regulatory
 - **FCA National Statutory Mechanism (NSM)** — regulated firm disclosures, PDMR notifications (insider dealings). Listed in SOURCE_MATRIX as P0 but no collector code exists.
