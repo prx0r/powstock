@@ -1,0 +1,18 @@
+[project]
+name = "powstock"
+version = "0.1.0"
+description = "UK-listed physical-economy data garden"
+requires-python = ">=3.11"
+dependencies = [
+    "httpx",
+    "pydantic",
+    "pydantic-settings",
+]
+
+[project.optional-dependencies]
+dev = ["pytest", "ruff"]
+mcp = ["mcp"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
