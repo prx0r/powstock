@@ -10,6 +10,9 @@ from powstock.collectors.psc_snapshot import fetch_universe_psc, summarise_psc
 from powstock.collectors.filing_events import fetch_universe_events, classify_filing, summarise_events
 from powstock.collectors.finnhub import fetch_insider_transactions, fetch_universe_insiders
 from powstock.collectors.ch_bulk_parsers import parse_appointments_file, parse_disqualifications_file
+from powstock.collectors.financials import fetch_latest_accounts, filter_universe_financials
+from powstock.collectors.takeover_panel import fetch_disclosure_table, parse_disclosure_forms
+from powstock.collectors.tr1_notifications import fetch_tr1_announcements, parse_tr1_details
 from powstock.collectors.runner import init_db, run_all, status
 
 __all__ = [
@@ -36,6 +39,12 @@ __all__ = [
     "fetch_universe_insiders",
     "parse_appointments_file",
     "parse_disqualifications_file",
+    "fetch_latest_accounts",
+    "filter_universe_financials",
+    "fetch_disclosure_table",
+    "parse_disclosure_forms",
+    "fetch_tr1_announcements",
+    "parse_tr1_details",
     "init_db",
     "run_all",
     "status",
