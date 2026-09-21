@@ -4,6 +4,7 @@ Orchestrates all powstock collectors. Stores results in SQLite.
 """
 
 import json
+import logging
 import sqlite3
 import time
 from datetime import datetime
@@ -11,6 +12,8 @@ from pathlib import Path
 from typing import Any
 
 from powstock.universe import UNIVERSE, STOOQ_SYMBOLS
+
+log = logging.getLogger(__name__)
 
 
 DB_PATH = Path("data/powstock.db")
@@ -26,6 +29,38 @@ def init_db(db_path: Path | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
 
     conn.executescript("""
+        CREATE TABLE IF NOT EXISTS ingest_run (
+            run_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            source TEXT NOT NULL,
+            dataset TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            completed_at TEXT,
+            status TEXT DEFAULT 'running',
+            source_url TEXT,
+            source_effective_at TEXT,
+            retrieved_at TEXT NOT NULL,
+            content_sha256 TEXT,
+            content_length INTEGER,
+            raw_object_uri TEXT,
+            parser_version TEXT,
+            records_seen INTEGER DEFAULT 0,
+            records_accepted INTEGER DEFAULT 0,
+            records_rejected INTEGER DEFAULT 0,
+            error_count INTEGER DEFAULT 0,
+            error_message TEXT
+        );
+
+        CREATE TABLE IF NOT EXISTS raw_artifact (
+            artifact_id INTEGER PRIMARY KEY AUTOINCREMENT,
+            run_id INTEGER NOT NULL,
+            sha256 TEXT NOT NULL,
+            mime_type TEXT,
+            compression TEXT,
+            bytes INTEGER,
+            storage_uri TEXT,
+            FOREIGN KEY (run_id) REFERENCES ingest_run(run_id)
+        );
+
         CREATE TABLE IF NOT EXISTS raw_ingest (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             source TEXT NOT NULL,
@@ -72,6 +107,7 @@ def init_db(db_path: Path | None = None) -> sqlite3.Connection:
 
         CREATE TABLE IF NOT EXISTS insider_deals (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT UNIQUE,
             ticker TEXT NOT NULL,
             company TEXT,
             director TEXT,
@@ -80,9 +116,11 @@ def init_db(db_path: Path | None = None) -> sqlite3.Connection:
             price REAL,
             shares INTEGER,
             value REAL,
-            trade_date TEXT,
-            filing_date TEXT,
-            observed_at TEXT NOT NULL
+            effective_at TEXT,
+            published_at TEXT,
+            observed_at TEXT NOT NULL,
+            source_url TEXT,
+            UNIQUE(ticker, director, effective_at, action, source_url)
         );
 
         CREATE TABLE IF NOT EXISTS short_interest (
@@ -92,19 +130,22 @@ def init_db(db_path: Path | None = None) -> sqlite3.Connection:
             company TEXT,
             position_pct REAL,
             notional_gbp REAL,
-            report_date TEXT,
-            observed_at TEXT NOT NULL
+            effective_at TEXT,
+            observed_at TEXT NOT NULL,
+            UNIQUE(isin, effective_at)
         );
 
         CREATE TABLE IF NOT EXISTS rns_announcements (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
+            event_id TEXT UNIQUE,
             ticker TEXT NOT NULL,
             headline TEXT,
             category TEXT,
+            effective_at TEXT,
             published_at TEXT,
+            observed_at TEXT NOT NULL,
             source_url TEXT,
-            rns_id TEXT,
-            observed_at TEXT NOT NULL
+            UNIQUE(ticker, source_url)
         );
 
         CREATE TABLE IF NOT EXISTS company_profiles (
@@ -118,7 +159,8 @@ def init_db(db_path: Path | None = None) -> sqlite3.Connection:
             officers_count INTEGER,
             charges_count INTEGER,
             psc_count INTEGER,
-            observed_at TEXT NOT NULL
+            observed_at TEXT NOT NULL,
+            UNIQUE(ticker, company_number)
         );
     """)
 
@@ -127,7 +169,13 @@ def init_db(db_path: Path | None = None) -> sqlite3.Connection:
 
 
 def _store_raw(conn: sqlite3.Connection, source: str, dataset: str, data: Any) -> Path:
-    """Store raw data to disk and record in database."""
+    """Store raw data to disk and record in database.
+
+    Records both the legacy raw_ingest row and the new ingest_run + raw_artifact
+    for proper provenance tracking.
+    """
+    import hashlib as _hashlib
+
     RAW_DIR.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -137,11 +185,33 @@ def _store_raw(conn: sqlite3.Connection, source: str, dataset: str, data: Any) -
         json.dump(data, f, indent=2, default=str)
 
     raw_bytes = raw_path.read_bytes()
-    raw_hash = __import__("hashlib").sha256(raw_bytes).hexdigest()
+    raw_hash = _hashlib.sha256(raw_bytes).hexdigest()
+    row_count = len(data) if isinstance(data, (list, dict)) else 1
+    now = datetime.now().isoformat()
+
+    # New ingestion ledger
+    cursor = conn.execute(
+        """INSERT INTO ingest_run
+           (source, dataset, started_at, completed_at, status,
+            retrieved_at, content_sha256, content_length, raw_object_uri,
+            records_seen, records_accepted)
+           VALUES (?, ?, ?, ?, 'ok', ?, ?, ?, ?, ?, ?)""",
+        (source, dataset, now, now, now, raw_hash, len(raw_bytes),
+         str(raw_path), row_count, row_count),
+    )
+    run_id = cursor.lastrowid
 
     conn.execute(
+        """INSERT INTO raw_artifact
+           (run_id, sha256, bytes, storage_uri)
+           VALUES (?, ?, ?, ?)""",
+        (run_id, raw_hash, len(raw_bytes), str(raw_path)),
+    )
+
+    # Legacy table (kept for backwards compat)
+    conn.execute(
         "INSERT INTO raw_ingest (source, dataset, observed_at, raw_hash, raw_path, row_count, bytes) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (source, dataset, datetime.now().isoformat(), raw_hash, str(raw_path), len(raw_bytes) if isinstance(data, list) else 1, len(raw_bytes)),
+        (source, dataset, now, raw_hash, str(raw_path), row_count, len(raw_bytes)),
     )
 
     return raw_path
@@ -193,16 +263,28 @@ def run_insiders(conn: sqlite3.Connection) -> int:
 
     for deal in deals:
         try:
+            # Deterministic event_id for idempotent inserts
+            import hashlib as _hl
+            event_id = _hl.sha256(
+                f"{deal['ticker']}|{deal['director']}|{deal['trade_date']}|"
+                f"{deal['transaction_type']}|{deal.get('url', '')}".encode()
+            ).hexdigest()[:16]
+
             conn.execute(
-                "INSERT INTO insider_deals (ticker, company, director, position, action, price, shares, value, trade_date, filing_date, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                (deal["ticker"], deal["company"], deal["director"], deal["position"],
-                 deal["transaction_type"], deal["price"], deal["shares"], deal["total_value"],
-                 deal["trade_date"], deal.get("filing_date", ""), datetime.now().isoformat()),
+                """INSERT OR REPLACE INTO insider_deals
+                   (event_id, ticker, company, director, position, action, price, shares, value,
+                    effective_at, published_at, observed_at, source_url)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+                (event_id, deal["ticker"], deal["company"], deal["director"],
+                 deal["position"], deal["transaction_type"], deal["price"],
+                 deal["shares"], deal["total_value"],
+                 deal["trade_date"], deal.get("filing_date", ""),
+                 datetime.now().isoformat(), deal.get("url", "")),
             )
             _store_obs(conn, "investegate", deal["ticker"], "insider_deal", deal["transaction_type"])
             count += 1
         except Exception as e:
-            print(f"  Warning: {deal.get('ticker', '?')} insert failed: {e}")
+            log.warning("PDMR insert failed for %s: %s", deal.get("ticker", "?"), e)
 
     _store_raw(conn, "fca_pdmr", "notifications", {"count": count})
     conn.execute(
@@ -223,16 +305,26 @@ def run_short_interest(conn: sqlite3.Connection) -> int:
     count = 0
 
     for pos in positions:
-        # Try to match to universe
+        # Try to match to universe via ISIN (exact match preferred)
         ticker = None
         for security in UNIVERSE:
-            if security.company.upper() in pos.issuer_name.upper():
+            if security.isin and security.isin.upper() == pos.isin.upper():
                 ticker = security.ticker
                 break
 
+        # Fallback: exact company name match (not substring)
+        if ticker is None:
+            for security in UNIVERSE:
+                if security.company.upper() == pos.issuer_name.upper():
+                    ticker = security.ticker
+                    break
+
         conn.execute(
-            "INSERT INTO short_interest (isin, ticker, company, position_pct, notional_gbp, report_date, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-            (pos.isin, ticker, pos.issuer_name, pos.position_pct, pos.notional_value_gbp, pos.report_date, datetime.now().isoformat()),
+            """INSERT OR REPLACE INTO short_interest
+               (isin, ticker, company, position_pct, notional_gbp, effective_at, observed_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?)""",
+            (pos.isin, ticker, pos.issuer_name, pos.position_pct,
+             pos.notional_value_gbp, pos.report_date, datetime.now().isoformat()),
         )
         if ticker:
             _store_obs(conn, "fca_ansp", ticker, "short_pct", pos.position_pct, "percent")
@@ -259,17 +351,27 @@ def run_rns(conn: sqlite3.Connection) -> int:
         try:
             announcements = fetch_ticker_rns(security.ticker, max_pages=2)
             for ann in announcements:
+                # Deterministic event_id
+                import hashlib as _hl
+                event_id = _hl.sha256(
+                    f"{ann['ticker']}|{ann['source_url']}".encode()
+                ).hexdigest()[:16]
+
                 conn.execute(
-                    "INSERT INTO rns_announcements (ticker, headline, category, published_at, source_url, rns_id, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (ann["ticker"], ann["headline"], ann["category"], ann["published_at"],
-                     ann["source_url"], ann.get("source_url", ""), datetime.now().isoformat()),
+                    """INSERT OR REPLACE INTO rns_announcements
+                       (event_id, ticker, headline, category, effective_at, published_at,
+                        observed_at, source_url)
+                       VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                    (event_id, ann["ticker"], ann["headline"], ann["category"],
+                     ann["published_at"], ann["published_at"],
+                     datetime.now().isoformat(), ann["source_url"]),
                 )
                 _store_obs(conn, "investegate", ann["ticker"], "rns_announcement", ann["headline"][:100])
                 count += 1
 
             time.sleep(1)
         except Exception as e:
-            print(f"  Warning: {security.ticker} RNS fetch failed: {e}")
+            log.warning("RNS fetch failed for %s: %s", security.ticker, e)
 
     _store_raw(conn, "lse_rns", "announcements", {"count": count})
     conn.execute(
@@ -291,7 +393,10 @@ def run_companies(conn: sqlite3.Connection) -> int:
 
     for ticker, data in companies.items():
         conn.execute(
-            "INSERT INTO company_profiles (ticker, company_number, company_name, status, sic_codes, registered_office, officers_count, charges_count, psc_count, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            """INSERT OR REPLACE INTO company_profiles
+               (ticker, company_number, company_name, status, sic_codes, registered_office,
+                officers_count, charges_count, psc_count, observed_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
             (ticker, data["company_number"], data["company_name"], data["status"],
              json.dumps(data["sic_codes"]), data["registered_office"],
              data["officers_count"], data["charges_count"], data["psc_count"],
@@ -308,6 +413,30 @@ def run_companies(conn: sqlite3.Connection) -> int:
     )
 
     print(f"  Companies: {count} profiles")
+    return count
+
+
+def run_finnhub(conn: sqlite3.Connection) -> int:
+    """Run Finnhub insider collector (optional, requires API key)."""
+    from powstock.settings import get_settings
+    api_key = get_settings().llm_api_key  # reuse a key slot or add FINNHUB_API_KEY
+    if not api_key:
+        log.info("Finnhub: no API key configured, skipping")
+        return 0
+
+    from powstock.collectors.finnhub import fetch_universe_insiders
+
+    print("Fetching insider transactions from Finnhub...")
+    results = fetch_universe_insiders(api_key=api_key)
+    count = sum(len(v) for v in results.values())
+
+    _store_raw(conn, "finnhub", "insider_transactions", results)
+    conn.execute(
+        "INSERT OR REPLACE INTO collector_state (source, last_run, status, rows, runs) VALUES (?, ?, 'ok', ?, COALESCE((SELECT runs FROM collector_state WHERE source='finnhub'), 0) + 1)",
+        ("finnhub", datetime.now().isoformat(), count),
+    )
+
+    print(f"  Finnhub: {count} transactions")
     return count
 
 
@@ -330,32 +459,39 @@ def run_all(conn: sqlite3.Connection | None = None) -> dict[str, int]:
     try:
         results["prices"] = run_prices(conn)
     except Exception as e:
-        print(f"  ERROR prices: {e}")
+        log.error("prices collector failed: %s", e)
         results["prices"] = 0
 
     try:
         results["insiders"] = run_insiders(conn)
     except Exception as e:
-        print(f"  ERROR insiders: {e}")
+        log.error("insiders collector failed: %s", e)
         results["insiders"] = 0
 
     try:
         results["short_interest"] = run_short_interest(conn)
     except Exception as e:
-        print(f"  ERROR short_interest: {e}")
+        log.error("short_interest collector failed: %s", e)
         results["short_interest"] = 0
 
     try:
         results["rns"] = run_rns(conn)
     except Exception as e:
-        print(f"  ERROR rns: {e}")
+        log.error("rns collector failed: %s", e)
         results["rns"] = 0
 
     try:
         results["companies"] = run_companies(conn)
     except Exception as e:
-        print(f"  ERROR companies: {e}")
+        log.error("companies collector failed: %s", e)
         results["companies"] = 0
+
+    # Optional collectors (require API keys)
+    try:
+        results["finnhub"] = run_finnhub(conn)
+    except Exception as e:
+        log.error("finnhub collector failed: %s", e)
+        results["finnhub"] = 0
 
     conn.commit()
 
@@ -390,7 +526,8 @@ def status(conn: sqlite3.Connection | None = None) -> None:
     # Table row counts
     print("\nTable Row Counts:")
     print("-" * 60)
-    for table in ["price_daily", "insider_deals", "short_interest", "rns_announcements", "company_profiles"]:
+    for table in ["price_daily", "insider_deals", "short_interest", "rns_announcements",
+                   "company_profiles", "ingest_run", "raw_artifact"]:
         try:
             count = conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0]
             print(f"  {table:25s} | {count:6d} rows")

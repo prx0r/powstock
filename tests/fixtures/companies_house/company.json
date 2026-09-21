@@ -1,0 +1,20 @@
+{
+  "company_name": "NATIONAL GRID PLC",
+  "company_number": "04031152",
+  "company_status": "active",
+  "sic_codes": [64610],
+  "registered_office_address": {
+    "address_line_1": "1-3 Strand",
+    "locality": "London",
+    "postal_code": "WC2N 5EH"
+  },
+  "date_of_incorporation": "2000-08-10",
+  "accounts": {
+    "next_accounts": {
+      "due_on": "2027-03-31"
+    }
+  },
+  "confirmation_statement": {
+    "next_due_on": "2027-06-15"
+  }
+}

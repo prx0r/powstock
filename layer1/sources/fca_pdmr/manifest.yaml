@@ -1,0 +1,32 @@
+id: fca_pdmr
+garden: powstock
+source:
+  authority: Investegate / FCA
+  type: html
+  url: "https://www.investegate.co.uk/Index.aspx"
+  backup_urls: []
+  license: "Scraped; internal use only"
+collection:
+  cadence: daily
+  backfill_from: "2024-01-01"
+  method: scrape
+  rate_limit: "0.5s/request"
+  parser: powstock.collectors.fca_pdmr
+storage:
+  raw: true
+  append_only: true
+  format: jsonl
+time:
+  source_timestamp: true
+  observed_at: true
+  effective_field: trade_date
+  published_field: filing_date
+health:
+  expected_min_rows: 5
+  max_staleness_hours: 48
+  schema_hash: "pdmr_v1"
+  error_threshold: 3
+schema:
+  columns: [ticker, company_name, director_name, position, transaction_type, price, shares, total_value, currency, isin, trade_date, venue, source_url, lei]
+  unique_keys: [ticker, director_name, trade_date, transaction_type, source_url]
+  event_id_fields: [ticker, director_name, trade_date, transaction_type, source_url]

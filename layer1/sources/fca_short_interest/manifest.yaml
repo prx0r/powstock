@@ -1,0 +1,33 @@
+id: fca_short_interest
+garden: powstock
+source:
+  authority: FCA
+  type: xlsx
+  url: "https://www.fca.org.uk/publication/documents/aggregated-net-short-positions.xlsx"
+  backup_urls:
+    - "https://www.fca.org.uk/publication/documents/aggregated-historic-net-short-positions.csv"
+  license: "Open Government Licence v3.0"
+collection:
+  cadence: daily
+  backfill_from: "2020-01-01"
+  method: http_get
+  rate_limit: "1/request"
+  parser: powstock.collectors.fca_short_interest
+storage:
+  raw: true
+  append_only: true
+  format: jsonl
+time:
+  source_timestamp: true
+  observed_at: true
+  effective_field: report_date
+  published_field: ""
+health:
+  expected_min_rows: 100
+  max_staleness_hours: 48
+  schema_hash: "fca_ansp_v1"
+  error_threshold: 3
+schema:
+  columns: [isin, issuer_name, position_pct, notional_value_gbp, report_date]
+  unique_keys: [isin, report_date]
+  event_id_fields: [isin, report_date]

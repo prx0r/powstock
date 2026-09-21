@@ -1,0 +1,32 @@
+id: tr1_notifications
+garden: powstock
+source:
+  authority: Investegate / FCA
+  type: html
+  url: "https://www.investegate.co.uk/Index.aspx"
+  backup_urls: []
+  license: "Scraped; internal use only"
+collection:
+  cadence: daily
+  backfill_from: "2024-01-01"
+  method: scrape
+  rate_limit: "1s/request"
+  parser: powstock.collectors.tr1_notifications
+storage:
+  raw: true
+  append_only: true
+  format: jsonl
+time:
+  source_timestamp: true
+  observed_at: true
+  effective_field: published_at
+  published_field: published_at
+health:
+  expected_min_rows: 1
+  max_staleness_hours: 48
+  schema_hash: "tr1_v1"
+  error_threshold: 3
+schema:
+  columns: [ticker, company, headline, published_at, source_url, source]
+  unique_keys: [ticker, source_url]
+  event_id_fields: [ticker, source_url]

@@ -1,0 +1,16 @@
+[
+  {
+    "name": "JOHN PETOE",
+    "officer_role": "director",
+    "appointed_on": "2012-01-01",
+    "nationality": "British",
+    "country_of_residence": "England"
+  },
+  {
+    "name": "TRACEY HOLLOWAY",
+    "officer_role": "secretary",
+    "appointed_on": "2015-03-15",
+    "nationality": "British",
+    "country_of_residence": "England"
+  }
+]

@@ -1,0 +1,32 @@
+id: companies_house
+garden: powstock
+source:
+  authority: Companies House
+  type: api
+  url: "https://api.company-information.service.gov.uk"
+  backup_urls: []
+  license: "Open Government Licence v3.0"
+collection:
+  cadence: daily
+  backfill_from: "2015-01-01"
+  method: api_auth
+  rate_limit: "600/5min"
+  parser: powstock.collectors.companies_house
+storage:
+  raw: true
+  append_only: true
+  format: jsonl
+time:
+  source_timestamp: true
+  observed_at: true
+  effective_field: ""
+  published_field: ""
+health:
+  expected_min_rows: 25
+  max_staleness_hours: 168
+  schema_hash: "ch_api_v1"
+  error_threshold: 5
+schema:
+  columns: [ticker, company_number, company_name, status, sic_codes, registered_office, officers_count, charges_count, psc_count]
+  unique_keys: [ticker, company_number]
+  event_id_fields: [ticker, company_number]

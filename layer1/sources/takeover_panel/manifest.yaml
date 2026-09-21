@@ -1,0 +1,32 @@
+id: takeover_panel
+garden: powstock
+source:
+  authority: Takeover Panel
+  type: html
+  url: "https://www.thetakeoverpanel.org.uk/disclosure"
+  backup_urls: []
+  license: "Crown Copyright; open access"
+collection:
+  cadence: daily
+  backfill_from: "2024-01-01"
+  method: http_get
+  rate_limit: "1/request"
+  parser: powstock.collectors.takeover_panel
+storage:
+  raw: true
+  append_only: true
+  format: jsonl
+time:
+  source_timestamp: true
+  observed_at: true
+  effective_field: ""
+  published_field: ""
+health:
+  expected_min_rows: 1
+  max_staleness_hours: 48
+  schema_hash: "takeover_v1"
+  error_threshold: 3
+schema:
+  columns: [url, title, form_type, source, fetched_at]
+  unique_keys: [url]
+  event_id_fields: [url]

@@ -1,0 +1,50 @@
+# Source Manifest Schema v1
+#
+# Every data source in Layer 1 must have a manifest.
+# This is the operational contract for the garden.
+
+# Identity
+id: string              # unique source ID, e.g. "yahoo_prices"
+garden: string          # which garden, e.g. "powstock"
+
+# Source authority
+source:
+  authority: string     # who publishes this, e.g. "Yahoo Finance"
+  type: string          # csv, xlsx, json, html, api, xbrl
+  url: string           # primary URL
+  backup_urls: list     # fallback URLs
+  license: string       # license for redistribution
+
+# Collection
+collection:
+  cadence: string       # hourly, daily, weekly, on_demand
+  backfill_from: string # ISO date, earliest useful data
+  method: string        # http_get, api_auth, scrape, bulk_download
+  rate_limit: string    # e.g. "600/5min", "1/s"
+  parser: string        # which parser module
+
+# Storage
+storage:
+  raw: bool             # preserve raw bytes
+  append_only: bool     # never overwrite
+  format: string        # jsonl, sqlite, parquet
+
+# Time semantics
+time:
+  source_timestamp: bool # does source provide event time?
+  observed_at: bool      # do we record when we collected it?
+  effective_field: string # which field is event time
+  published_field: string # which field is publication time
+
+# Health
+health:
+  expected_min_rows: int     # minimum rows for a "good" run
+  max_staleness_hours: int   # alert if data older than this
+  schema_hash: string        # hash of expected schema
+  error_threshold: int       # consecutive errors before alert
+
+# Schema
+schema:
+  columns: list              # column names and types
+  unique_keys: list          # natural keys for dedup
+  event_id_fields: list      # fields that compose deterministic event ID

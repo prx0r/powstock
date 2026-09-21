@@ -4,6 +4,7 @@ Scrapes Investegate for Regulatory News Service announcements.
 Free, no API key. Parses headlines, company names, and metadata.
 """
 
+import logging
 import re
 import time
 from dataclasses import dataclass, field
@@ -11,6 +12,8 @@ from datetime import datetime
 from typing import Any
 
 import httpx
+
+log = logging.getLogger(__name__)
 
 INVESTEGATE_URL = "https://www.investegate.co.uk/Index.aspx"
 
@@ -105,7 +108,13 @@ def fetch_investegate_page(
     page: int = 1,
     page_size: int = 50,
 ) -> str:
-    """Fetch a page of announcements from Investegate."""
+    """Fetch a page of announcements from Investegate.
+
+    Args:
+        ticker: Filter by specific TIDM. None = all.
+        page: Page number (1-indexed). Investegate uses 'page' param.
+        page_size: Results per page (default 50).
+    """
     client = httpx.Client(
         timeout=30,
         follow_redirects=True,
@@ -113,9 +122,11 @@ def fetch_investegate_page(
     )
 
     try:
-        params = {"searchtype": "3"}  # All companies
+        params: dict[str, Any] = {"searchtype": "3"}  # All companies
         if ticker:
             params["search"] = ticker
+        if page > 1:
+            params["page"] = str(page)
 
         resp = client.get(INVESTEGATE_URL, params=params)
         resp.raise_for_status()

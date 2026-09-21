@@ -1,19 +1,33 @@
 """Companies House collector.
 
 Uses the Companies House REST API for company profiles, officers, filings, and charges.
-API key from powuk SDK. Free, 600 requests per 5 minutes.
+API key from settings. Free, 600 requests per 5 minutes.
 """
 
 import base64
 import json
+import logging
 import time
 from dataclasses import dataclass, field
 from typing import Any
 
 import httpx
 
+log = logging.getLogger(__name__)
+
 CH_BASE = "https://api.company-information.service.gov.uk"
-CH_API_KEY = "d284d51e-b98b-4517-861d-0f8b2273ceeb"  # from powuk
+
+
+def _get_api_key() -> str:
+    """Get Companies House API key from settings."""
+    from powstock.settings import get_settings
+    key = get_settings().companies_house_api_key
+    if not key:
+        raise RuntimeError(
+            "Companies House API key not configured. "
+            "Set POWSTOCK_COMPANIES_HOUSE_API_KEY in .env"
+        )
+    return key
 
 
 @dataclass
@@ -49,11 +63,12 @@ class Filing:
     category: str
     document_id: str
     source: str = "companies_house"
+    raw: dict = field(default_factory=dict)
 
 
 def _get_auth() -> tuple[str, str]:
     """Return HTTP Basic auth tuple for Companies House API."""
-    return (CH_API_KEY, "")
+    return (_get_api_key(), "")
 
 
 def fetch_company_profile(company_number: str) -> CompanyProfile | None:
@@ -78,7 +93,11 @@ def fetch_company_profile(company_number: str) -> CompanyProfile | None:
             confirmation_statement_next_due=data.get("confirmation_statement", {}).get("next_due_on", ""),
             raw=data,
         )
-    except Exception:
+    except httpx.HTTPStatusError as e:
+        log.warning("CH profile HTTP %s for %s: %s", e.response.status_code, company_number, e)
+        return None
+    except Exception as e:
+        log.warning("CH profile error for %s: %s", company_number, e)
         return None
     finally:
         client.close()
@@ -109,7 +128,11 @@ def fetch_company_officers(company_number: str) -> list[Officer]:
             ))
 
         return officers
-    except Exception:
+    except httpx.HTTPStatusError as e:
+        log.warning("CH officers HTTP %s for %s: %s", e.response.status_code, company_number, e)
+        return []
+    except Exception as e:
+        log.warning("CH officers error for %s: %s", company_number, e)
         return []
     finally:
         client.close()
@@ -138,7 +161,11 @@ def fetch_company_filings(company_number: str) -> list[Filing]:
             ))
 
         return filings
-    except Exception:
+    except httpx.HTTPStatusError as e:
+        log.warning("CH filings HTTP %s for %s: %s", e.response.status_code, company_number, e)
+        return []
+    except Exception as e:
+        log.warning("CH filings error for %s: %s", company_number, e)
         return []
     finally:
         client.close()
@@ -169,7 +196,11 @@ def fetch_company_charges(company_number: str) -> list[dict[str, Any]]:
             })
 
         return charges
-    except Exception:
+    except httpx.HTTPStatusError as e:
+        log.warning("CH charges HTTP %s for %s: %s", e.response.status_code, company_number, e)
+        return []
+    except Exception as e:
+        log.warning("CH charges error for %s: %s", company_number, e)
         return []
     finally:
         client.close()
@@ -198,7 +229,11 @@ def fetch_company_psc(company_number: str) -> list[dict[str, Any]]:
             })
 
         return psc_list
-    except Exception:
+    except httpx.HTTPStatusError as e:
+        log.warning("CH PSC HTTP %s for %s: %s", e.response.status_code, company_number, e)
+        return []
+    except Exception as e:
+        log.warning("CH PSC error for %s: %s", company_number, e)
         return []
     finally:
         client.close()
@@ -226,7 +261,11 @@ def fetch_officer_appointments(officer_id: str) -> list[dict[str, Any]]:
             })
 
         return appointments
-    except Exception:
+    except httpx.HTTPStatusError as e:
+        log.warning("CH appointments HTTP %s for %s: %s", e.response.status_code, officer_id, e)
+        return []
+    except Exception as e:
+        log.warning("CH appointments error for %s: %s", officer_id, e)
         return []
     finally:
         client.close()
@@ -293,8 +332,10 @@ def fetch_universe_companies() -> dict[str, dict[str, Any]]:
 
                 time.sleep(0.2)  # rate limiting
 
-        except Exception:
-            continue
+        except httpx.HTTPStatusError as e:
+            log.warning("CH search HTTP %s for %s: %s", e.response.status_code, security.company, e)
+        except Exception as e:
+            log.warning("CH search error for %s: %s", security.company, e)
         finally:
             client.close()
 

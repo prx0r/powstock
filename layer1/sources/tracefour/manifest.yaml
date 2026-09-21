@@ -1,0 +1,32 @@
+id: tracefour
+garden: powstock
+source:
+  authority: Tracefour
+  type: json
+  url: "https://tracefour.com/v1/eu/uk"
+  backup_urls: []
+  license: "Free API, registration required"
+collection:
+  cadence: daily
+  backfill_from: "2024-01-01"
+  method: api_auth
+  rate_limit: "60/hr"
+  parser: powstock.collectors.tracefour
+storage:
+  raw: true
+  append_only: true
+  format: jsonl
+time:
+  source_timestamp: true
+  observed_at: true
+  effective_field: trade_date
+  published_field: disclosed_date
+health:
+  expected_min_rows: 1
+  max_staleness_hours: 72
+  schema_hash: "tracefour_v1"
+  error_threshold: 5
+schema:
+  columns: [filing_id, ticker, company_name, insider_name, role, direction, shares, price, value, currency, trade_date, disclosed_date, source_url]
+  unique_keys: [ticker, insider_name, trade_date, direction]
+  event_id_fields: [ticker, insider_name, trade_date, direction]

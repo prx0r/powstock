@@ -5,8 +5,11 @@ When a director appears in multiple companies, we link them.
 This creates the "who knows what through which companies" network.
 """
 
+import logging
 from dataclasses import dataclass, field
 from typing import Any
+
+log = logging.getLogger(__name__)
 
 
 @dataclass
@@ -183,15 +186,13 @@ class EntityResolver:
                 continue
 
             # Search for company
-            import httpx
-            CH_BASE = "https://api.company-information.service.gov.uk"
-            CH_API_KEY = "d284d51e-b98b-4517-861d-0f8b2273ceeb"
+            from powstock.collectors.companies_house import CH_BASE, _get_auth
 
             client = httpx.Client(timeout=30)
             try:
                 resp = client.get(
                     f"{CH_BASE}/search/companies",
-                    auth=(CH_API_KEY, ""),
+                    auth=_get_auth(),
                     params={"q": security.company, "items_per_page": 1},
                 )
                 resp.raise_for_status()
@@ -217,8 +218,8 @@ class EntityResolver:
                             resigned_date=officer.resigned_date or "",
                         )
 
-            except Exception:
-                pass
+            except Exception as e:
+                log.warning("Resolver error for %s: %s", security.company, e)
             finally:
                 client.close()
 

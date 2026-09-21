@@ -1,0 +1,32 @@
+id: finnhub_insider
+garden: powstock
+source:
+  authority: Finnhub
+  type: json
+  url: "https://finnhub.io/api/v1/stock/insider-transactions"
+  backup_urls: []
+  license: "Free API, registration required"
+collection:
+  cadence: daily
+  backfill_from: "2024-01-01"
+  method: api_auth
+  rate_limit: "60/min"
+  parser: powstock.collectors.finnhub
+storage:
+  raw: true
+  append_only: true
+  format: jsonl
+time:
+  source_timestamp: true
+  observed_at: true
+  effective_field: transactionDate
+  published_field: filingDate
+health:
+  expected_min_rows: 1
+  max_staleness_hours: 72
+  schema_hash: "finnhub_v1"
+  error_threshold: 5
+schema:
+  columns: [ticker, name, share, change, transaction_date, transaction_price, transaction_volume, transaction_code, transaction_price_total, filing_date, filing_url]
+  unique_keys: [ticker, name, transaction_date, transaction_code]
+  event_id_fields: [ticker, name, transaction_date, transaction_code]

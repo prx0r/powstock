@@ -6,12 +6,15 @@ Reuses the pattern from fish/fish/services/prices.py.
 
 import csv
 import io
+import logging
 import time
 from typing import Any
 
 import httpx
 
 from powstock.universe import STOOQ_SYMBOLS
+
+log = logging.getLogger(__name__)
 
 STOOQ_BASE = "https://stooq.com/q/d/l/"
 CACHE_TTL_S = 15 * 60
@@ -67,7 +70,8 @@ def fetch_ohlcv(ticker: str, days: int = 365) -> list[dict[str, Any]]:
         _cache[cache_key] = (now, rows)
         return rows
 
-    except Exception:
+    except Exception as e:
+        log.warning("Stooq fetch error for %s: %s", ticker, e)
         return hit[1] if hit else []
 
 

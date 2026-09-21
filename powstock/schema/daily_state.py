@@ -2,6 +2,9 @@
 
 Every day generates a state that cannot later be recreated perfectly.
 That's the data garden.
+
+NULL means "we don't know." Zero means "we measured zero."
+These are fundamentally different things.
 """
 
 from dataclasses import dataclass, field
@@ -11,7 +14,12 @@ from typing import Any
 
 @dataclass
 class PowCompanyStateDaily:
-    """Daily state for a company in the POW universe."""
+    """Daily state for a company in the POW universe.
+
+    Nullable fields preserve absence as first-class state.
+    A data garden must distinguish "we have no insider feed today"
+    from "there were zero insider purchases."
+    """
 
     # Identity
     date: date
@@ -28,62 +36,66 @@ class PowCompanyStateDaily:
     supply_chain_position: list[str] = field(default_factory=list)
 
     # Ownership
-    top_holders: int = 0
-    psc_state: str = ""  # JSON of current PSCs
-    institutional_concentration: float = 0.0
-    ownership_delta_7d: float = 0.0
-    ownership_delta_30d: float = 0.0
+    top_holders: int | None = None
+    psc_state: str | None = None  # JSON of current PSCs
+    institutional_concentration: float | None = None
+    ownership_delta_7d: float | None = None
+    ownership_delta_30d: float | None = None
 
     # Insiders
-    insider_buy_value_7d: float = 0.0
-    insider_buy_value_90d: float = 0.0
-    insider_sell_value_7d: float = 0.0
-    conviction_buy_count: int = 0
-    net_conviction_value: float = 0.0
+    insider_buy_value_7d: float | None = None
+    insider_buy_value_90d: float | None = None
+    insider_sell_value_7d: float | None = None
+    conviction_buy_count: int | None = None
+    net_conviction_value: float | None = None
 
     # Corporate activity
-    director_join_count: int = 0
-    director_leave_count: int = 0
-    share_issuance: float = 0.0
-    new_charges: int = 0
-    charge_value: float = 0.0
-    acquisitions: int = 0
-    disposals: int = 0
+    director_join_count: int | None = None
+    director_leave_count: int | None = None
+    share_issuance: float | None = None
+    new_charges: int | None = None
+    charge_value: float | None = None
+    acquisitions: int | None = None
+    disposals: int | None = None
 
     # Fundamentals
-    turnover: float = 0.0
-    inventory: float = 0.0
-    cash: float = 0.0
-    debt: float = 0.0
-    employees: int = 0
-    fixed_assets: float = 0.0
-    capex_proxy: float = 0.0
+    turnover: float | None = None
+    inventory: float | None = None
+    cash: float | None = None
+    debt: float | None = None
+    employees: int | None = None
+    fixed_assets: float | None = None
+    capex_proxy: float | None = None
 
     # POW external state
-    constraint_score: float = 0.0
-    demand_score: float = 0.0
-    supply_response_score: float = 0.0
-    labour_scarcity_score: float = 0.0
-    planning_activity: int = 0
-    procurement_activity: int = 0
+    constraint_score: float | None = None
+    demand_score: float | None = None
+    supply_response_score: float | None = None
+    labour_scarcity_score: float | None = None
+    planning_activity: int | None = None
+    procurement_activity: int | None = None
 
     # Market state
-    price: float = 0.0
-    market_cap: float = 0.0
-    volume: int = 0
-    spread: float = 0.0
-    volatility: float = 0.0
+    price: float | None = None
+    market_cap: float | None = None
+    volume: int | None = None
+    spread: float | None = None
+    volatility: float | None = None
 
     # Derived signals
-    capital_response_score: float = 0.0
-    insider_alignment_score: float = 0.0
-    ownership_pressure_score: float = 0.0
-    constraint_exposure_score: float = 0.0
-    supply_response_lag: int = 0  # days
+    capital_response_score: float | None = None
+    insider_alignment_score: float | None = None
+    ownership_pressure_score: float | None = None
+    constraint_exposure_score: float | None = None
+    supply_response_lag: int | None = None  # days
+
+    # Provenance
+    observed_at: str | None = None  # when POWStock collected this
+    source_freshness: str | None = None  # e.g. "same_day", "1d_stale", "7d_stale"
 
     def to_dict(self) -> dict[str, Any]:
-        """Convert to dict for storage."""
-        return {
+        """Convert to dict for storage. None fields are omitted."""
+        result = {
             "date": self.date.isoformat(),
             "entity_id": self.entity_id,
             "company_number": self.company_number,
@@ -94,45 +106,29 @@ class PowCompanyStateDaily:
             "bottlenecks": self.bottlenecks,
             "geographies": self.geographies,
             "supply_chain_position": self.supply_chain_position,
-            "top_holders": self.top_holders,
-            "psc_state": self.psc_state,
-            "institutional_concentration": self.institutional_concentration,
-            "ownership_delta_7d": self.ownership_delta_7d,
-            "ownership_delta_30d": self.ownership_delta_30d,
-            "insider_buy_value_7d": self.insider_buy_value_7d,
-            "insider_buy_value_90d": self.insider_buy_value_90d,
-            "insider_sell_value_7d": self.insider_sell_value_7d,
-            "conviction_buy_count": self.conviction_buy_count,
-            "net_conviction_value": self.net_conviction_value,
-            "director_join_count": self.director_join_count,
-            "director_leave_count": self.director_leave_count,
-            "share_issuance": self.share_issuance,
-            "new_charges": self.new_charges,
-            "charge_value": self.charge_value,
-            "turnover": self.turnover,
-            "inventory": self.inventory,
-            "cash": self.cash,
-            "debt": self.debt,
-            "employees": self.employees,
-            "fixed_assets": self.fixed_assets,
-            "capex_proxy": self.capex_proxy,
-            "constraint_score": self.constraint_score,
-            "demand_score": self.demand_score,
-            "supply_response_score": self.supply_response_score,
-            "labour_scarcity_score": self.labour_scarcity_score,
-            "planning_activity": self.planning_activity,
-            "procurement_activity": self.procurement_activity,
-            "price": self.price,
-            "market_cap": self.market_cap,
-            "volume": self.volume,
-            "spread": self.spread,
-            "volatility": self.volatility,
-            "capital_response_score": self.capital_response_score,
-            "insider_alignment_score": self.insider_alignment_score,
-            "ownership_pressure_score": self.ownership_pressure_score,
-            "constraint_exposure_score": self.constraint_exposure_score,
-            "supply_response_lag": self.supply_response_lag,
         }
+        # Add nullable fields only if not None
+        for field_name in [
+            "top_holders", "psc_state", "institutional_concentration",
+            "ownership_delta_7d", "ownership_delta_30d",
+            "insider_buy_value_7d", "insider_buy_value_90d", "insider_sell_value_7d",
+            "conviction_buy_count", "net_conviction_value",
+            "director_join_count", "director_leave_count", "share_issuance",
+            "new_charges", "charge_value", "acquisitions", "disposals",
+            "turnover", "inventory", "cash", "debt", "employees",
+            "fixed_assets", "capex_proxy",
+            "constraint_score", "demand_score", "supply_response_score",
+            "labour_scarcity_score", "planning_activity", "procurement_activity",
+            "price", "market_cap", "volume", "spread", "volatility",
+            "capital_response_score", "insider_alignment_score",
+            "ownership_pressure_score", "constraint_exposure_score",
+            "supply_response_lag",
+            "observed_at", "source_freshness",
+        ]:
+            val = getattr(self, field_name)
+            if val is not None:
+                result[field_name] = val
+        return result
 
 
 def build_daily_state(
@@ -145,90 +141,105 @@ def build_daily_state(
     market_data: dict[str, Any] | None = None,
     pow_data: dict[str, Any] | None = None,
 ) -> PowCompanyStateDaily:
-    """Build a daily state record from available data sources."""
+    """Build a daily state record from available data sources.
+
+    Missing data stays None. We never fabricate values.
+    """
     from powstock.universe import BY_TICKER
 
     security = BY_TICKER.get(ticker)
     if not security:
         raise ValueError(f"Unknown ticker: {ticker}")
 
-    # Extract insider metrics
-    insider_buy_7d = 0.0
-    insider_buy_90d = 0.0
-    insider_sell_7d = 0.0
-    conviction_count = 0
-    net_conviction = 0.0
+    # Insider metrics — None if no data provided
+    insider_buy_7d = None
+    insider_buy_90d = None
+    insider_sell_7d = None
+    conviction_count = None
+    net_conviction = None
 
     if insider_data:
-        insider_buy_7d = insider_data.get("buy_value_7d", 0)
-        insider_buy_90d = insider_data.get("buy_value_90d", 0)
-        insider_sell_7d = insider_data.get("sell_value_7d", 0)
-        conviction_count = insider_data.get("conviction_buy_count", 0)
-        net_conviction = insider_data.get("net_conviction_value", 0)
+        insider_buy_7d = insider_data.get("buy_value_7d")
+        insider_buy_90d = insider_data.get("buy_value_90d")
+        insider_sell_7d = insider_data.get("sell_value_7d")
+        conviction_count = insider_data.get("conviction_buy_count")
+        net_conviction = insider_data.get("net_conviction_value")
 
-    # Extract ownership metrics
-    psc_state = ""
-    ownership_delta_7d = 0.0
-    ownership_delta_30d = 0.0
+    # Ownership metrics
+    psc_state = None
+    ownership_delta_7d = None
+    ownership_delta_30d = None
 
     if ownership_data:
-        psc_state = str(ownership_data.get("psc_state", ""))
-        ownership_delta_7d = ownership_data.get("delta_7d", 0)
-        ownership_delta_30d = ownership_data.get("delta_30d", 0)
+        psc_state = ownership_data.get("psc_state")
+        ownership_delta_7d = ownership_data.get("delta_7d")
+        ownership_delta_30d = ownership_data.get("delta_30d")
 
-    # Extract financial metrics
-    turnover = 0.0
-    cash = 0.0
-    debt = 0.0
-    employees = 0
-    fixed_assets = 0.0
+    # Financial metrics — None if not provided
+    turnover = None
+    cash = None
+    debt = None
+    employees = None
+    fixed_assets = None
 
     if financial_data:
-        turnover = financial_data.get("turnover", 0) or 0
-        cash = financial_data.get("cash", 0) or 0
-        debt = (financial_data.get("creditors_due_within_one_year", 0) or 0) + \
-               (financial_data.get("creditors_due_after_one_year", 0) or 0)
-        employees = int(financial_data.get("average_number_employees_during_period", 0) or 0)
-        fixed_assets = financial_data.get("tangible_fixed_assets", 0) or 0
+        turnover = financial_data.get("turnover")
+        cash = financial_data.get("cash")
+        creditors_within = financial_data.get("creditors_due_within_one_year") or 0
+        creditors_after = financial_data.get("creditors_due_after_one_year") or 0
+        debt = creditors_within + creditors_after if (creditors_within or creditors_after) else None
+        employees = financial_data.get("average_number_employees_during_period")
+        if employees is not None:
+            employees = int(employees)
+        fixed_assets = financial_data.get("tangible_fixed_assets")
 
-    # Extract filing event metrics
-    director_joins = 0
-    director_leaves = 0
-    share_issuance = 0.0
-    new_charges = 0
-    charge_value = 0.0
+    # Filing event metrics — None if no events
+    director_joins = None
+    director_leaves = None
+    share_issuance = None
+    new_charges = None
+    charge_value = None
 
     if filing_events:
+        dj = 0
+        dl = 0
+        si = 0
+        nc = 0
+        cv = 0.0
         for event in filing_events:
             et = event.get("event_type", "")
             if et == "director_appointed":
-                director_joins += 1
+                dj += 1
             elif et == "director_departed":
-                director_leaves += 1
+                dl += 1
             elif et == "share_issuance":
-                share_issuance += 1
+                si += 1
             elif et == "new_charge":
-                new_charges += 1
+                nc += 1
+        director_joins = dj
+        director_leaves = dl
+        share_issuance = float(si)
+        new_charges = nc
 
-    # Extract market data
-    price = 0.0
-    market_cap = 0.0
-    volume = 0
+    # Market data — None if not provided
+    price = None
+    market_cap = None
+    volume = None
 
     if market_data:
-        price = market_data.get("price", 0)
-        market_cap = market_data.get("market_cap", 0)
-        volume = market_data.get("volume", 0)
+        price = market_data.get("price")
+        market_cap = market_data.get("market_cap")
+        volume = market_data.get("volume")
 
-    # Extract POW data
-    constraint_score = 0.0
-    demand_score = 0.0
+    # POW data — None if not provided
+    constraint_score = None
+    demand_score = None
 
     if pow_data:
-        constraint_score = pow_data.get("constraint_score", 0)
-        demand_score = pow_data.get("demand_score", 0)
+        constraint_score = pow_data.get("constraint_score")
+        demand_score = pow_data.get("demand_score")
 
-    # Compute derived signals
+    # Compute derived signals (only if inputs available)
     capital_response_score = _compute_capital_response(
         insider_buy_90d, share_issuance, new_charges, fixed_assets
     )
@@ -274,42 +285,60 @@ def build_daily_state(
 
 
 def _compute_capital_response(
-    insider_buy: float,
-    share_issuance: float,
-    new_charges: int,
-    fixed_assets: float,
-) -> float:
-    """Compute capital response score (0-1)."""
+    insider_buy: float | None,
+    share_issuance: float | None,
+    new_charges: int | None,
+    fixed_assets: float | None,
+) -> float | None:
+    """Compute capital response score (0-1).
+
+    Returns None if insufficient data to compute.
+    """
+    has_data = any(v is not None for v in [insider_buy, share_issuance, new_charges, fixed_assets])
+    if not has_data:
+        return None
+
     score = 0.0
 
-    if insider_buy > 0:
-        score += min(insider_buy / 1000000, 0.3)  # £1M+ insider buying = max 0.3
+    if insider_buy and insider_buy > 0:
+        score += min(insider_buy / 1000000, 0.3)
 
-    if share_issuance > 0:
-        score += min(share_issuance / 5, 0.3)  # 5+ issuances = max 0.3
+    if share_issuance and share_issuance > 0:
+        score += min(share_issuance / 5, 0.3)
 
-    if new_charges > 0:
-        score += min(new_charges / 3, 0.2)  # 3+ charges = max 0.2
+    if new_charges and new_charges > 0:
+        score += min(new_charges / 3, 0.2)
 
-    if fixed_assets > 0:
-        score += 0.2  # Has tangible assets
+    if fixed_assets and fixed_assets > 0:
+        score += 0.2
 
     return min(score, 1.0)
 
 
 def _compute_insider_alignment(
-    buy_7d: float,
-    sell_7d: float,
-    conviction_count: int,
-) -> float:
-    """Compute insider alignment score (0-1)."""
-    if buy_7d + sell_7d == 0:
+    buy_7d: float | None,
+    sell_7d: float | None,
+    conviction_count: int | None,
+) -> float | None:
+    """Compute insider alignment score (0-1).
+
+    Returns None if insufficient data to compute.
+    """
+    has_data = any(v is not None for v in [buy_7d, sell_7d, conviction_count])
+    if not has_data:
+        return None
+
+    buy = buy_7d or 0.0
+    sell = sell_7d or 0.0
+
+    if buy + sell == 0:
         return 0.0
 
     # Net buying ratio
-    net_ratio = (buy_7d - sell_7d) / (buy_7d + sell_7d)
+    net_ratio = (buy - sell) / (buy + sell)
 
     # Conviction bonus
-    conviction_bonus = min(conviction_count * 0.1, 0.3)
+    conv = conviction_count or 0
+    conviction_bonus = min(conv * 0.1, 0.3)
 
     return min(max(net_ratio + conviction_bonus, 0), 1.0)

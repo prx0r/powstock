@@ -4,10 +4,13 @@ Free, no API key. Fetches daily OHLCV from Yahoo Finance.
 Uses .L suffix for LSE Main Market stocks.
 """
 
+import logging
 import time
 from typing import Any
 
 import httpx
+
+log = logging.getLogger(__name__)
 
 YAHOO_BASE = "https://query1.finance.yahoo.com/v8/finance/chart"
 CACHE_TTL_S = 15 * 60
@@ -125,7 +128,7 @@ def fetch_ohlcv(ticker: str, days: int = 365) -> list[dict[str, Any]]:
         return rows
 
     except Exception as e:
-        print(f"  Yahoo fetch error for {ticker}: {e}")
+        log.warning("Yahoo fetch error for %s: %s", ticker, e)
         return hit[1] if hit else []
 
 

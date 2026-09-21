@@ -6,11 +6,14 @@ Free, no API key. XLSX format (CSV no longer available).
 
 import csv
 import io
+import logging
 from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 import httpx
+
+log = logging.getLogger(__name__)
 
 # FCA changed from CSV to XLSX format
 FCA_ANSP_URL = "https://www.fca.org.uk/publication/documents/aggregated-net-short-positions.xlsx"
@@ -220,25 +223,35 @@ def fetch_all_short_interest() -> dict[str, dict[str, Any]]:
     results = {}
 
     for security in UNIVERSE:
-        # Try ticker match
-        short_data = lookup_ticker_short(security.ticker, positions)
-        if short_data:
-            results[security.ticker] = short_data
-            continue
+        # Try ISIN match first (exact)
+        if security.isin:
+            for pos in positions:
+                if security.isin.upper() == pos.isin.upper():
+                    results[security.ticker] = {
+                        "ticker": security.ticker,
+                        "isin": pos.isin,
+                        "company": pos.issuer_name,
+                        "short_pct": pos.position_pct,
+                        "notional_gbp": pos.notional_value_gbp,
+                        "report_date": pos.report_date,
+                        "source": pos.source,
+                    }
+                    break
 
-        # Try company name match
-        company_upper = security.company.upper()
-        for pos in positions:
-            if company_upper in pos.issuer_name.upper():
-                results[security.ticker] = {
-                    "ticker": security.ticker,
-                    "isin": pos.isin,
-                    "company": pos.issuer_name,
-                    "short_pct": pos.position_pct,
-                    "notional_gbp": pos.notional_value_gbp,
-                    "report_date": pos.report_date,
-                    "source": pos.source,
-                }
-                break
+        # Try exact company name match (not substring)
+        if security.ticker not in results:
+            company_upper = security.company.upper()
+            for pos in positions:
+                if company_upper == pos.issuer_name.upper():
+                    results[security.ticker] = {
+                        "ticker": security.ticker,
+                        "isin": pos.isin,
+                        "company": pos.issuer_name,
+                        "short_pct": pos.position_pct,
+                        "notional_gbp": pos.notional_value_gbp,
+                        "report_date": pos.report_date,
+                        "source": pos.source,
+                    }
+                    break
 
     return results

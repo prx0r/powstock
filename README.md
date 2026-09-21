@@ -2,59 +2,77 @@
 
 UK-listed physical-economy data garden. Sensors on every node of the compute-power-materials supply chain.
 
-## What This Is
-
-A continuously-growing, provenance-preserving historical model of how physical constraints (grid capacity, semiconductor supply, mineral scarcity, power electronics) get repriced through UK-listed equities.
-
-Not a trading system. A **measurement system** that happens to produce tradeable signals.
-
-## The Thesis
-
-London is unusually rich in **power, physical infrastructure, strategic materials, industrial electronics, and small-cap bottleneck names** rather than just software. Every node in the physical compute supply chain has a UK-listed security you can observe.
-
-The L2 order book on a £38m AIM stock (Helium One) contains more information about physical scarcity repricing than the order book on National Grid. Thinner markets are better sensors.
-
 ## Architecture
 
 ```
-powstock (this repo)
-  ├── imports from fish: strategy engine, ensemble, backtest, judge, MCP server
-  ├── imports from powpowpow: core transport, warehouse, signal framework, datagarden primitives
-  ├── imports from powuk: Companies House SDK, constraint model, UK regions
-  └── new: UK stock collectors, L2 feeds, insider dealing, RNS, physical-reasoning compiler
+powstock/
+├── layer1/              ← Data Garden
+│   ├── sources/         ← per-source manifests + collectors
+│   │   ├── yahoo_prices/
+│   │   ├── fca_short_interest/
+│   │   ├── companies_house/
+│   │   ├── fca_pdmr/
+│   │   ├── rns_announcements/
+│   │   ├── psc_snapshot/
+│   │   ├── filing_events/
+│   │   └── takeover_panel/
+│   ├── manifest_schema.yaml
+│   └── health.py
+│
+├── layer2/              ← Analysis (consumes Layer 1)
+│   ├── signals/
+│   └── experiments/
+│
+├── powstock/            ← Core package (collectors, schema, entities)
+└── tests/
 ```
 
-**fish becomes the consumer product on top.** powstock is the data garden; fish is the frontend that trades on it.
+## Layer 1: The Data Garden
+
+Every source has:
+- **Manifest** — operational contract (authority, cadence, schema, health thresholds)
+- **Collector** — fetches, parses, stores raw bytes
+- **Health** — standardized state (last_success, records_seen, staleness)
+- **Raw preservation** — append-only, timestamped, content-addressed
+
+No fish dependency. No powuk dependency. No signal logic. Just the tape.
+
+## Layer 2: Analysis
+
+Consumes Layer 1 data. No domain-specific code. No collector logic. Models compete on the same data. Historical data tells us which predicts.
 
 ## Quick Start
 
 ```bash
-# Clone with fish
-git clone https://github.com/prx0r/fish.git
-git clone https://github.com/prx0r/powstock.git
+pip install -e ".[dev]"
 
-# powstock provides the data garden
-# fish provides the strategy engine + ensemble + MCP
+# Check source health
+make health
+
+# Run all collectors
+make run
+
+# Run tests
+make test
 ```
 
-## Status
+## Sources
 
-- [x] Universe defined (25 securities)
-- [x] Causal graph mapped
-- [ ] Price collectors (Stooq .uk)
-- [ ] L2 order book feed (IBKR)
-- [ ] RNS announcement collector
-- [ ] Insider dealing collector (FCA PDMR)
-- [ ] Companies House financial extraction
-- [ ] Physical-reasoning compiler
-- [ ] Signal framework adaptation
-- [ ] Backtest integration with fish
+| Source | Authority | Cadence | Data |
+|--------|-----------|---------|------|
+| yahoo_prices | Yahoo Finance | Daily | OHLCV |
+| fca_short_interest | FCA | Daily | Short positions |
+| companies_house | Companies House | Daily | Profiles, officers, filings |
+| fca_pdmr | Investegate/FCA | Daily | Insider dealings |
+| rns_announcements | Investegate/LSE | Daily | RNS announcements |
+| psc_snapshot | Companies House | Daily | Persons of Significant Control |
+| filing_events | Companies House | Daily | Filing → economic event |
+| takeover_panel | Takeover Panel | Daily | Disclosure forms |
 
 ## Docs
 
-- [UNIVERSE.md](UNIVERSE.md) — the 25 securities and why they belong
+- [UNIVERSE.md](UNIVERSE.md) — the 25 securities
 - [CAUSAL_GRAPH.md](CAUSAL_GRAPH.md) — the physical-economic graph
-- [ARCHITECTURE.md](ARCHITECTURE.md) — how it connects to fish/powpowpow/powuk
-- [DATA_SOURCES.md](DATA_SOURCES.md) — what's available, what's missing
-- [L2_STRATEGY.md](L2_STRATEGY.md) — liquid vs constraint datasets
-- [COLLECTORS.md](COLLECTORS.md) — what needs building
+- [layer1/README.md](layer1/) — Layer 1 architecture
+- [layer2/README.md](layer2/) — Layer 2 architecture
+- [reviews/review1.md](reviews/review1.md) — peer review

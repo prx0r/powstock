@@ -1,0 +1,32 @@
+id: filing_events
+garden: powstock
+source:
+  authority: Companies House
+  type: api
+  url: "https://api.company-information.service.gov.uk/company/{company_number}/filing-history"
+  backup_urls: []
+  license: "Open Government Licence v3.0"
+collection:
+  cadence: daily
+  backfill_from: "2015-01-01"
+  method: api_auth
+  rate_limit: "600/5min"
+  parser: powstock.collectors.filing_events
+storage:
+  raw: true
+  append_only: true
+  format: jsonl
+time:
+  source_timestamp: true
+  observed_at: true
+  effective_field: date
+  published_field: ""
+health:
+  expected_min_rows: 10
+  max_staleness_hours: 168
+  schema_hash: "filing_v1"
+  error_threshold: 5
+schema:
+  columns: [company_number, date, description, category, document_id, event_type, severity]
+  unique_keys: [company_number, document_id]
+  event_id_fields: [company_number, document_id]

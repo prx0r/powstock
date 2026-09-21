@@ -1,0 +1,32 @@
+id: stooq_prices
+garden: powstock
+source:
+  authority: Stooq
+  type: csv
+  url: "https://stooq.com/q/d/l/"
+  backup_urls: []
+  license: "Free, no redistribution"
+collection:
+  cadence: daily
+  backfill_from: "2000-01-01"
+  method: http_get
+  rate_limit: "0.5s/request"
+  parser: powstock.collectors.stooq_prices
+storage:
+  raw: true
+  append_only: true
+  format: jsonl
+time:
+  source_timestamp: true
+  observed_at: true
+  effective_field: date
+  published_field: ""
+health:
+  expected_min_rows: 20
+  max_staleness_hours: 48
+  schema_hash: "stooq_v1"
+  error_threshold: 3
+schema:
+  columns: [ticker, date, open, high, low, close, volume]
+  unique_keys: [ticker, date]
+  event_id_fields: [ticker, date]

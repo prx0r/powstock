@@ -9,6 +9,7 @@ Parses the structured UK MAR notification format to extract:
 - ISIN of instrument
 """
 
+import logging
 import re
 import time
 from dataclasses import dataclass, field
@@ -16,6 +17,8 @@ from datetime import datetime
 from typing import Any
 
 import httpx
+
+log = logging.getLogger(__name__)
 
 INVESTEGATE_URL = "https://www.investegate.co.uk/Index.aspx"
 
@@ -125,9 +128,10 @@ def _parse_pdmr_notification(html: str, ticker: str, company_name: str, url: str
             
             # Create a deal for each director found
             if director_pairs:
-                # If multiple directors with total shares, divide equally (approximation)
-                shares_per_director = total_shares // len(director_pairs) if total_shares > 0 else 0
-                
+                # Do NOT divide total shares equally — that invents precision.
+                # If individual allocation cannot be extracted, store NULL shares
+                # and the total as group_shares. Unknown is valuable; fabricated
+                # precision is poisonous.
                 for role, name in director_pairs:
                     name = name.strip()
                     if len(name) > 3:
@@ -138,8 +142,8 @@ def _parse_pdmr_notification(html: str, ticker: str, company_name: str, url: str
                             position=role.strip(),
                             transaction_type=transaction_type,
                             price=price,
-                            shares=shares_per_director,
-                            total_value=price * shares_per_director,
+                            shares=0,  # unknown per-director
+                            total_value=0.0,  # unknown per-director
                             currency="USD" if "USD" in summary_text or "$" in summary_text else "GBP",
                             isin="",
                             trade_date=trade_date,
@@ -246,7 +250,7 @@ def _parse_pdmr_notification(html: str, ticker: str, company_name: str, url: str
                     ))
 
     except Exception as e:
-        print(f"  Parse error: {e}")
+        log.warning("PDMR parse error for %s: %s", url, e)
     
     return deals
 
@@ -274,9 +278,11 @@ def fetch_pdmr_announcements(
 
     try:
         for page in range(1, max_pages + 1):
-            params = {"searchtype": "3"}
+            params: dict[str, Any] = {"searchtype": "3"}
             if ticker:
                 params["search"] = ticker
+            if page > 1:
+                params["page"] = str(page)
 
             resp = client.get(INVESTEGATE_URL, params=params)
             resp.raise_for_status()
@@ -375,7 +381,7 @@ def fetch_pdmr_announcements(
                     time.sleep(0.3)
 
                 except Exception as e:
-                    print(f"  Error fetching {ann['url']}: {e}")
+                    log.warning("PDMR fetch error %s: %s", ann["url"], e)
 
             time.sleep(0.5)
 

@@ -1,0 +1,32 @@
+id: psc_snapshot
+garden: powstock
+source:
+  authority: Companies House
+  type: ndjson_zip
+  url: "https://download.companieshouse.gov.uk/psc-snapshot-{date_str}.json.zip"
+  backup_urls: []
+  license: "Open Government Licence v3.0"
+collection:
+  cadence: daily
+  backfill_from: "2016-01-01"
+  method: bulk_download
+  rate_limit: "1/day"
+  parser: powstock.collectors.psc_snapshot
+storage:
+  raw: true
+  append_only: true
+  format: jsonl
+time:
+  source_timestamp: true
+  observed_at: true
+  effective_field: snapshot_date
+  published_field: ""
+health:
+  expected_min_rows: 100000
+  max_staleness_hours: 48
+  schema_hash: "psc_bulk_v1"
+  error_threshold: 3
+schema:
+  columns: [company_number, company_name, company_status, psc_name, psc_kind, nature_of_control, notified_on, ceased_on, address, country_of_residence, nationality, date_of_birth]
+  unique_keys: [company_number, psc_name, notified_on]
+  event_id_fields: [company_number, psc_name, notified_on]
