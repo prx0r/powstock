@@ -1,6 +1,8 @@
 """Unified collector runner.
 
 Orchestrates all powstock collectors. Stores results in SQLite.
+Uses ArtifactStore for raw bytes, not parsed objects.
+Uses collector registry for manifest-driven execution.
 """
 
 import json
@@ -12,6 +14,8 @@ from pathlib import Path
 from typing import Any
 
 from powstock.universe import UNIVERSE, STOOQ_SYMBOLS
+from layer1.artifacts import ArtifactStore
+from layer1.registry import get_enabled, print_registry
 
 log = logging.getLogger(__name__)
 
@@ -168,53 +172,41 @@ def init_db(db_path: Path | None = None) -> sqlite3.Connection:
     return conn
 
 
-def _store_raw(conn: sqlite3.Connection, source: str, dataset: str, data: Any) -> Path:
+def _store_raw(
+    conn: sqlite3.Connection,
+    source: str,
+    dataset: str,
+    data: Any,
+    raw_bytes: bytes | None = None,
+    source_url: str = "",
+) -> Path:
     """Store raw data to disk and record in database.
 
-    Records both the legacy raw_ingest row and the new ingest_run + raw_artifact
-    for proper provenance tracking.
+    If raw_bytes is provided, stores the original bytes.
+    Otherwise serializes data to JSON (legacy behavior).
     """
-    import hashlib as _hashlib
+    store = ArtifactStore(base_dir=RAW_DIR, conn=conn)
 
-    RAW_DIR.mkdir(parents=True, exist_ok=True)
-
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    raw_path = RAW_DIR / f"{source}_{dataset}_{timestamp}.json"
-
-    with open(raw_path, "w") as f:
-        json.dump(data, f, indent=2, default=str)
-
-    raw_bytes = raw_path.read_bytes()
-    raw_hash = _hashlib.sha256(raw_bytes).hexdigest()
-    row_count = len(data) if isinstance(data, (list, dict)) else 1
-    now = datetime.now().isoformat()
-
-    # New ingestion ledger
-    cursor = conn.execute(
-        """INSERT INTO ingest_run
-           (source, dataset, started_at, completed_at, status,
-            retrieved_at, content_sha256, content_length, raw_object_uri,
-            records_seen, records_accepted)
-           VALUES (?, ?, ?, ?, 'ok', ?, ?, ?, ?, ?, ?)""",
-        (source, dataset, now, now, now, raw_hash, len(raw_bytes),
-         str(raw_path), row_count, row_count),
-    )
-    run_id = cursor.lastrowid
-
-    conn.execute(
-        """INSERT INTO raw_artifact
-           (run_id, sha256, bytes, storage_uri)
-           VALUES (?, ?, ?, ?)""",
-        (run_id, raw_hash, len(raw_bytes), str(raw_path)),
-    )
-
-    # Legacy table (kept for backwards compat)
-    conn.execute(
-        "INSERT INTO raw_ingest (source, dataset, observed_at, raw_hash, raw_path, row_count, bytes) VALUES (?, ?, ?, ?, ?, ?, ?)",
-        (source, dataset, now, raw_hash, str(raw_path), row_count, len(raw_bytes)),
-    )
-
-    return raw_path
+    if raw_bytes is not None:
+        # Store original bytes — the correct Level 1 path
+        artifact = store.put_http_response(
+            content=raw_bytes,
+            source=source,
+            dataset=dataset,
+            source_url=source_url,
+        )
+        return Path(artifact["storage_uri"])
+    else:
+        # Legacy: serialize parsed data to JSON
+        # TODO: migrate callers to pass raw_bytes
+        json_bytes = json.dumps(data, indent=2, default=str).encode()
+        artifact = store.put_bytes(
+            data=json_bytes,
+            source=source,
+            dataset=dataset,
+            metadata={"note": "serialized from parsed data"},
+        )
+        return Path(artifact["storage_uri"])
 
 
 def _store_obs(conn: sqlite3.Connection, source: str, ticker: str, metric: str, value: Any, unit: str = ""):
@@ -252,13 +244,25 @@ def run_prices(conn: sqlite3.Connection) -> int:
     return count
 
 
-def run_insiders(conn: sqlite3.Connection) -> int:
+def run_insiders(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
     """Run FCA PDMR insider dealing collector for universe tickers."""
     from powstock.collectors.fca_pdmr import fetch_pdmr_announcements
 
     print("Fetching insider dealings from Investegate...")
     # Fetch all recent PDMR announcements (not per-ticker to avoid duplicates)
-    deals = fetch_pdmr_announcements(max_pages=5)
+    deals, raw_artifacts = fetch_pdmr_announcements(max_pages=5)
+    count = 0
+
+    # Store raw HTML artifacts
+    if artifact_store and raw_artifacts:
+        for art in raw_artifacts:
+            artifact_store.put_http_response(
+                content=art["content"],
+                source="fca_pdmr",
+                dataset="notification_html",
+                source_url=art["source_url"],
+                metadata={"ticker": art["ticker"]},
+            )
     count = 0
 
     for deal in deals:
@@ -296,12 +300,22 @@ def run_insiders(conn: sqlite3.Connection) -> int:
     return count
 
 
-def run_short_interest(conn: sqlite3.Connection) -> int:
+def run_short_interest(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
     """Run FCA short interest collector."""
     from powstock.collectors.fca_short_interest import fetch_current_short_positions
 
     print("Fetching short interest from FCA...")
-    positions = fetch_current_short_positions()
+    positions, raw_bytes = fetch_current_short_positions()
+
+    # Store raw XLSX/CSV artifact
+    if artifact_store and raw_bytes:
+        artifact_store.put_bytes(
+            data=raw_bytes,
+            source="fca_ansp",
+            dataset="short_positions_xlsx",
+            source_url="https://www.fca.org.uk/publication/documents/aggregated-net-short-positions.xlsx",
+        )
+
     count = 0
 
     for pos in positions:
@@ -449,6 +463,9 @@ def run_all(conn: sqlite3.Connection | None = None) -> dict[str, int]:
     if conn is None:
         conn = init_db()
 
+    # Create ArtifactStore for raw byte preservation
+    artifact_store = ArtifactStore(base_dir=RAW_DIR, conn=conn)
+
     print(f"\n{'='*60}")
     print(f"POWSTOCK Collector Run — {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"{'='*60}")
@@ -463,7 +480,7 @@ def run_all(conn: sqlite3.Connection | None = None) -> dict[str, int]:
         results["prices"] = 0
 
     try:
-        results["insiders"] = run_insiders(conn)
+        results["insiders"] = run_insiders(conn, artifact_store)
     except Exception as e:
         log.error("insiders collector failed: %s", e)
         results["insiders"] = 0
@@ -513,7 +530,10 @@ def status(conn: sqlite3.Connection | None = None) -> None:
     if conn is None:
         conn = init_db()
 
-    print("\nCollector Status:")
+    # Show registry
+    print_registry()
+
+    print("Collector Status:")
     print("-" * 60)
 
     rows = conn.execute("SELECT source, last_run, status, rows, runs FROM collector_state ORDER BY source").fetchall()
@@ -533,6 +553,13 @@ def status(conn: sqlite3.Connection | None = None) -> None:
             print(f"  {table:25s} | {count:6d} rows")
         except Exception:
             print(f"  {table:25s} | (not created)")
+
+    # Show artifact count
+    try:
+        count = conn.execute("SELECT COUNT(*) FROM raw_artifact").fetchone()[0]
+        print(f"\n  Raw artifacts: {count}")
+    except Exception:
+        pass
 
     if should_close:
         conn.close()

@@ -30,16 +30,16 @@ class ShortPosition:
     source: str = "fca_ansp"
 
 
-def fetch_current_short_positions() -> list[ShortPosition]:
+def fetch_current_short_positions() -> tuple[list[ShortPosition], bytes | None]:
     """Download the current aggregated net short positions from FCA.
 
-    Returns list of ShortPosition records for all UK shares with >0.2% short.
-    Now uses XLSX format (CSV no longer available).
+    Returns (positions, raw_bytes). Raw bytes are the original XLSX/CSV.
     """
     client = httpx.Client(timeout=30)
     try:
         resp = client.get(FCA_ANSP_URL)
         resp.raise_for_status()
+        raw_bytes = resp.content
 
         # Try to parse as XLSX first
         if resp.headers.get("content-type", "").startswith("application/vnd.openxmlformats"):
@@ -47,7 +47,7 @@ def fetch_current_short_positions() -> list[ShortPosition]:
                 import openpyxl
                 import io
 
-                wb = openpyxl.load_workbook(io.BytesIO(resp.content))
+                wb = openpyxl.load_workbook(io.BytesIO(raw_bytes))
                 ws = wb.active
 
                 # Find header row (contains "ISIN" or "Name of Company")
@@ -59,7 +59,7 @@ def fetch_current_short_positions() -> list[ShortPosition]:
                         break
 
                 if header_row is None:
-                    return []
+                    return [], raw_bytes
 
                 # Data starts 2 rows after header (skip empty row)
                 data_start = header_row + 2
@@ -95,7 +95,7 @@ def fetch_current_short_positions() -> list[ShortPosition]:
                     except (ValueError, KeyError, TypeError, IndexError):
                         continue
 
-                return positions
+                return positions, raw_bytes
 
             except ImportError:
                 pass  # Fall back to CSV parsing
@@ -124,7 +124,7 @@ def fetch_current_short_positions() -> list[ShortPosition]:
             except (ValueError, KeyError):
                 continue
 
-        return positions
+        return positions, raw_bytes
 
     finally:
         client.close()

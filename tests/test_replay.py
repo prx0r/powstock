@@ -15,89 +15,76 @@ import tempfile
 from datetime import date, datetime
 from pathlib import Path
 
-from powstock.collectors.runner import _store_raw, init_db
+from powstock.collectors.runner import init_db
+from layer1.artifacts import ArtifactStore
 
 
 def test_raw_bytes_are_preserved():
     """Raw data written to disk must be byte-identical on read-back."""
     with tempfile.TemporaryDirectory() as tmp:
-        raw_dir = Path(tmp) / "data" / "raw"
-        raw_dir.mkdir(parents=True)
+        store = ArtifactStore(base_dir=Path(tmp) / "raw")
 
-        # Simulate storing raw data
         test_data = {"tickers": ["NG.", "SSE"], "prices": [100.0, 200.0]}
-        raw_path = raw_dir / "test_source_20260921.json"
+        json_bytes = json.dumps(test_data, indent=2, default=str).encode()
 
-        with open(raw_path, "w") as f:
-            json.dump(test_data, f, indent=2, default=str)
-
-        raw_bytes = raw_path.read_bytes()
-        sha256 = hashlib.sha256(raw_bytes).hexdigest()
+        artifact = store.put_bytes(
+            data=json_bytes,
+            source="test_source",
+            dataset="test_dataset",
+        )
 
         # Read back
-        with open(raw_path) as f:
-            readback = json.load(f)
+        artifact_path = store.get(artifact["artifact_id"])
+        assert artifact_path is not None
+        readback = artifact_path.read_bytes()
+        assert readback == json_bytes
 
-        readback_bytes = json.dumps(readback, indent=2, default=str).encode()
-        readback_sha256 = hashlib.sha256(readback_bytes).hexdigest()
-
-        # SHA256 of the on-disk bytes must match
-        assert sha256 == readback_sha256, "Raw bytes changed on read-back"
-        assert readback == test_data, "Raw data changed on read-back"
+        # SHA256 must match
+        assert hashlib.sha256(readback).hexdigest() == artifact["sha256"]
 
 
 def test_raw_ingest_recorded():
-    """_store_raw must record ingest_run + raw_artifact + raw_ingest."""
+    """ArtifactStore must record raw_artifact in database."""
     with tempfile.TemporaryDirectory() as tmp:
         db_path = Path(tmp) / "test.db"
         conn = init_db(db_path)
 
+        store = ArtifactStore(base_dir=Path(tmp) / "raw", conn=conn)
         test_data = [{"ticker": "NG.", "price": 100.0}]
-        _store_raw(conn, "test_source", "test_dataset", test_data)
-        conn.commit()
+        json_bytes = json.dumps(test_data, indent=2, default=str).encode()
 
-        # Check ingest_run
-        run_count = conn.execute("SELECT COUNT(*) FROM ingest_run").fetchone()[0]
-        assert run_count >= 1, f"Expected at least 1 ingest_run, got {run_count}"
+        store.put_bytes(
+            data=json_bytes,
+            source="test_source",
+            dataset="test_dataset",
+        )
+        conn.commit()
 
         # Check raw_artifact
         artifact_count = conn.execute("SELECT COUNT(*) FROM raw_artifact").fetchone()[0]
         assert artifact_count >= 1, f"Expected at least 1 raw_artifact, got {artifact_count}"
 
-        # Check raw_ingest (legacy)
-        ingest_count = conn.execute("SELECT COUNT(*) FROM raw_ingest").fetchone()[0]
-        assert ingest_count >= 1, f"Expected at least 1 raw_ingest, got {ingest_count}"
-
-        # SHA256 must be consistent
-        run_row = conn.execute(
-            "SELECT content_sha256 FROM ingest_run WHERE source='test_source' ORDER BY run_id DESC LIMIT 1"
-        ).fetchone()
-        artifact_row = conn.execute(
-            "SELECT sha256 FROM raw_artifact ORDER BY artifact_id DESC LIMIT 1"
-        ).fetchone()
-        assert run_row[0] == artifact_row[0], "SHA256 mismatch between ingest_run and raw_artifact"
-
         conn.close()
 
 
 def test_replay_from_raw():
-    """Wipe normalized data, replay from raw, verify same event counts."""
-    import powstock.collectors.runner as runner_mod
-
+    """Wipe normalized data, replay from raw artifact, verify same event counts."""
     with tempfile.TemporaryDirectory() as tmp:
-        # Patch RAW_DIR to point inside our temp dir
-        original_raw_dir = runner_mod.RAW_DIR
-        runner_mod.RAW_DIR = Path(tmp) / "data" / "raw"
-
         db_path = Path(tmp) / "test.db"
         conn = init_db(db_path)
+        store = ArtifactStore(base_dir=Path(tmp) / "raw", conn=conn)
 
         # Step 1: Store some raw data and "normalize" it
         raw_data = [
             {"ticker": "TEST", "director": "Alice", "trade_date": "2026-09-18"},
             {"ticker": "TEST", "director": "Bob", "trade_date": "2026-09-19"},
         ]
-        _store_raw(conn, "test_source", "insiders", raw_data)
+        json_bytes = json.dumps(raw_data, indent=2, default=str).encode()
+        artifact = store.put_bytes(
+            data=json_bytes,
+            source="test_source",
+            dataset="insiders",
+        )
 
         # Insert normalized records
         for deal in raw_data:
@@ -125,11 +112,11 @@ def test_replay_from_raw():
         count_after_wipe = conn.execute("SELECT COUNT(*) FROM insider_deals").fetchone()[0]
         assert count_after_wipe == 0, "Wipe failed"
 
-        # Step 3: Replay from raw
-        raw_files = list(runner_mod.RAW_DIR.glob("test_source_insiders_*.json"))
-        assert len(raw_files) == 1, f"Expected 1 raw file, got {len(raw_files)}"
+        # Step 3: Replay from raw artifact
+        artifact_path = store.get(artifact["artifact_id"])
+        assert artifact_path is not None, "Raw artifact not found"
 
-        with open(raw_files[0]) as f:
+        with open(artifact_path) as f:
             replayed_data = json.load(f)
 
         for deal in replayed_data:
@@ -163,4 +150,3 @@ def test_replay_from_raw():
         assert ids_before == ids_after, f"Event ID mismatch: {ids_after} != {ids_before}"
 
         conn.close()
-        runner_mod.RAW_DIR = original_raw_dir

@@ -275,6 +275,7 @@ def fetch_pdmr_announcements(
     )
 
     all_deals = []
+    raw_artifacts = []
 
     try:
         for page in range(1, max_pages + 1):
@@ -359,6 +360,14 @@ def fetch_pdmr_announcements(
                     resp.raise_for_status()
                     ann_html = resp.text
 
+                    # Store raw HTML as artifact
+                    raw_artifacts.append({
+                        "source_url": ann["url"],
+                        "content": resp.content,
+                        "content_type": "text/html",
+                        "ticker": ann["ticker"],
+                    })
+
                     deals = _parse_pdmr_notification(ann_html, ann["ticker"], ann["company"], ann["url"])
                     for deal in deals:
                         all_deals.append({
@@ -388,7 +397,7 @@ def fetch_pdmr_announcements(
     finally:
         client.close()
 
-    return all_deals
+    return all_deals, raw_artifacts
 
 
 def fetch_ticker_insiders(ticker: str, max_pages: int = 3) -> list[dict[str, Any]]:
