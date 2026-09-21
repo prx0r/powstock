@@ -20,12 +20,15 @@ import httpx
 log = logging.getLogger(__name__)
 
 FCA_NSM_BASE = "https://www.fca.org.uk"
-FCA_NSM_URL = f"{FCA_NSM_BASE}/markets/primary-markets/regulatory-disclosures/national-storage-mechanism"
+FCA_NSM_DOCS = f"{FCA_NSM_BASE}/markets/primary-markets/regulatory-disclosures/national-storage-mechanism"
+# The actual NSM data API (discovered from the docs page)
+FCA_NSM_DATA = "https://data.fca.org.uk/api/nsm"
 
 
 def fetch_nsm_page(max_pages: int = 5) -> list[dict[str, Any]]:
     """Fetch regulatory announcements from FCA NSM.
 
+    Uses the FCA data API to fetch announcements.
     Returns list of announcement metadata dicts.
     """
     client = httpx.Client(
@@ -37,29 +40,42 @@ def fetch_nsm_page(max_pages: int = 5) -> list[dict[str, Any]]:
 
     try:
         for page in range(1, max_pages + 1):
-            params = {"page": page} if page > 1 else {}
-            resp = client.get(FCA_NSM_URL, params=params)
+            params = {"page": page, "pageSize": 50}
+            resp = client.get(FCA_NSM_DATA, params=params)
             resp.raise_for_status()
 
-            # Store raw HTML for later parsing
-            html = resp.text
-
-            # Parse announcements (simplified — real implementation would use proper HTML parsing)
-            import re
-            # Find announcement links
-            links = re.findall(r'href="([^"]*announcement[^"]*)"', html, re.IGNORECASE)
-
-            for link in links:
-                if not link.startswith("http"):
-                    link = f"{FCA_NSM_BASE}{link}"
-                announcements.append({
-                    "url": link,
-                    "page": page,
-                    "fetched_at": datetime.now().isoformat(),
-                })
-
-            if not links:
-                break
+            # Try JSON response first
+            try:
+                data = resp.json()
+                if isinstance(data, dict) and "documents" in data:
+                    for doc in data["documents"]:
+                        announcements.append({
+                            "url": doc.get("url", ""),
+                            "title": doc.get("title", ""),
+                            "company": doc.get("companyName", ""),
+                            "lei": doc.get("lei", ""),
+                            "category": doc.get("category", ""),
+                            "published_at": doc.get("publicationDate", ""),
+                            "page": page,
+                        })
+                    if not data["documents"]:
+                        break
+                else:
+                    break
+            except Exception:
+                # Fall back to HTML parsing
+                import re
+                links = re.findall(r'href="([^"]*announcement[^"]*)"', resp.text, re.IGNORECASE)
+                for link in links:
+                    if not link.startswith("http"):
+                        link = f"{FCA_NSM_BASE}{link}"
+                    announcements.append({
+                        "url": link,
+                        "page": page,
+                        "fetched_at": datetime.now().isoformat(),
+                    })
+                if not links:
+                    break
 
     except Exception as e:
         log.warning("FCA NSM fetch error: %s", e)

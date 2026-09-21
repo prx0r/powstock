@@ -82,18 +82,20 @@ def discover_psc_files(date_str: str) -> dict[str, Any]:
 def download_psc_snapshot(
     date: datetime | None = None,
     archive_dir: Path = Path("data/raw/psc"),
+    archive_only: bool = True,
 ) -> dict[str, Any] | None:
     """Download and archive the daily PSC snapshot.
 
-    Archives raw ZIP files before parsing. This is Level 1 raw preservation.
+    By default, archives raw ZIP files without inflating (archive_only=True).
+    This prevents OOM on the 2GB+ multipart dataset.
 
     Args:
         date: Date to fetch (default: yesterday).
         archive_dir: Directory to archive raw ZIPs.
+        archive_only: If True, only archive ZIPs without parsing.
 
     Returns:
-        Dict with keys: records, requested_date, source_date, archive_paths, sha256.
-        Or None if unavailable.
+        Dict with metadata about the download.
     """
     if date is None:
         date = datetime.now() - timedelta(days=1)
@@ -107,72 +109,82 @@ def download_psc_snapshot(
     log.info("PSC files for %s: single=%s, parts=%d",
              requested_date_str, files["single_file"], files["total_parts"])
 
-    # Try single file first, then multipart
     source_date = requested_date_str
     source_url = ""
-    all_records: list[dict] = []
     archive_paths: list[str] = []
+    total_bytes = 0
 
     client = httpx.Client(timeout=120, follow_redirects=True)
 
     try:
         if files["single_file"]:
-            # Download single file
+            # Download single file with streaming
             source_url = f"{CH_PSC_BASE}/{files['single_file']}"
-            resp = client.get(source_url)
+            with client.stream("GET", source_url) as resp:
+                if resp.status_code == 404:
+                    prev_date = date - timedelta(days=1)
+                    source_date = prev_date.strftime("%Y-%m-%d")
+                    prev_files = discover_psc_files(source_date)
+                    if prev_files["single_file"]:
+                        source_url = f"{CH_PSC_BASE}/{prev_files['single_file']}"
+                        resp.close()
+                        resp = client.stream("GET", source_url)
 
-            if resp.status_code == 404:
-                # Try previous day
-                prev_date = date - timedelta(days=1)
-                source_date = prev_date.strftime("%Y-%m-%d")
-                prev_files = discover_psc_files(source_date)
-                if prev_files["single_file"]:
-                    source_url = f"{CH_PSC_BASE}/{prev_files['single_file']}"
-                    resp = client.get(source_url)
-
-            if resp.status_code == 200:
-                # Archive raw ZIP
-                zip_path = date_dir / files["single_file"]
-                zip_path.write_bytes(resp.content)
-                archive_paths.append(str(zip_path))
-
-                # Parse records from ZIP
-                all_records = _parse_zip_content(resp.content)
+                if resp.status_code == 200:
+                    zip_path = date_dir / files["single_file"]
+                    with open(zip_path, "wb") as f:
+                        for chunk in resp.iter_bytes(chunk_size=65536):
+                            f.write(chunk)
+                    archive_paths.append(str(zip_path))
+                    total_bytes = zip_path.stat().st_size
+                    log.info("Archived PSC single file: %s (%d bytes)", zip_path, total_bytes)
 
         elif files["multipart_parts"]:
-            # Download all parts
-            source_date_requested = requested_date_str
-            for part_name in files["multipart_parts"]:
+            # Download all parts with streaming
+            for i, part_name in enumerate(files["multipart_parts"]):
                 source_url = f"{CH_PSC_BASE}/{part_name}"
-                resp = client.get(source_url)
+                resp = client.send(client.build_request("GET", source_url), stream=True)
 
                 if resp.status_code == 404:
-                    # Try previous day's parts
                     prev_date = date - timedelta(days=1)
                     source_date = prev_date.strftime("%Y-%m-%d")
                     prev_part_name = part_name.replace(requested_date_str, source_date)
                     source_url = f"{CH_PSC_BASE}/{prev_part_name}"
-                    resp = client.get(source_url)
+                    resp.close()
+                    resp = client.send(client.build_request("GET", source_url), stream=True)
 
                 if resp.status_code == 200:
-                    # Archive raw ZIP part
                     zip_path = date_dir / part_name
-                    zip_path.write_bytes(resp.content)
+                    with open(zip_path, "wb") as f:
+                        for chunk in resp.iter_bytes(chunk_size=65536):
+                            f.write(chunk)
                     archive_paths.append(str(zip_path))
-
-                    # Parse records from this part
-                    part_records = _parse_zip_content(resp.content)
-                    all_records.extend(part_records)
+                    total_bytes += zip_path.stat().st_size
+                    log.info("Archived PSC part %d/%d: %s (%d bytes)",
+                             i+1, len(files["multipart_parts"]), part_name, zip_path.stat().st_size)
+                    resp.close()
                 else:
                     log.warning("PSC part %s returned %d", part_name, resp.status_code)
+                    resp.close()
         else:
             log.warning("No PSC files found for %s", requested_date_str)
             return None
 
-        # Compute SHA256 of all archived data
+        # Compute SHA256 of all archived data (streaming)
         combined_hash = hashlib.sha256()
         for p in archive_paths:
-            combined_hash.update(Path(p).read_bytes())
+            with open(p, "rb") as f:
+                while True:
+                    chunk = f.read(65536)
+                    if not chunk:
+                        break
+                    combined_hash.update(chunk)
+
+        # Parse records only if not archive_only
+        all_records: list[dict] = []
+        if not archive_only:
+            for p in archive_paths:
+                all_records.extend(_parse_zip_content(Path(p).read_bytes()))
 
         return {
             "records": all_records,
@@ -182,6 +194,7 @@ def download_psc_snapshot(
             "archive_paths": archive_paths,
             "sha256": combined_hash.hexdigest(),
             "total_parts": len(archive_paths),
+            "total_bytes": total_bytes,
         }
 
     except Exception as e:

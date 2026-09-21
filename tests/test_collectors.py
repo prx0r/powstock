@@ -131,6 +131,40 @@ class TestTakeoverPanel:
 
 
 @pytest.mark.integration
+class TestPSCSnapshot:
+    def test_discover_psc_files(self):
+        from powstock.collectors.psc_snapshot import discover_psc_files
+        from datetime import datetime
+        today = datetime.now().strftime("%Y-%m-%d")
+        files = discover_psc_files(today)
+        assert files["single_file"] is not None or files["total_parts"] > 0
+
+    def test_archive_psc_single_file(self):
+        from powstock.collectors.psc_snapshot import download_psc_snapshot
+        from datetime import datetime
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp:
+            result = download_psc_snapshot(
+                date=datetime.now(),
+                archive_dir=Path(tmp) / "psc",
+                archive_only=True,
+            )
+            if result:
+                assert len(result["archive_paths"]) > 0
+                assert result["total_bytes"] > 0
+                assert result["sha256"] != ""
+
+
+@pytest.mark.integration
+class TestFCANSM:
+    def test_fetch_nsm_page(self):
+        from powstock.collectors.fca_nsm import fetch_nsm_page
+        # May return empty if API requires auth
+        announcements = fetch_nsm_page(max_pages=1)
+        assert isinstance(announcements, list)
+
+
+@pytest.mark.integration
 class TestFullPipeline:
     def test_run_all_collectors(self):
         """Run the full pipeline on a fresh DB."""

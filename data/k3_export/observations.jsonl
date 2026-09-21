@@ -64,6 +64,7 @@
 {"as_of": "", "metric": "short_interest_pct", "source": "fca_ansp", "subject": "powstock:PRE", "unit": "percent", "value": 0.4}
 {"as_of": "", "metric": "short_interest_pct", "source": "fca_ansp", "subject": "powstock:RPI", "unit": "percent", "value": 0.7}
 {"as_of": "2026-09-21", "metric": "short_interest_pct", "source": "fca_ansp", "subject": "powstock:CNA", "unit": "percent", "value": 0.6}
+{"as_of": "2026-09-21", "metric": "short_interest_pct", "source": "fca_ansp", "subject": "powstock:CNA", "unit": "percent", "value": 0.6}
 {"as_of": "", "metric": "insider_buy_value", "source": "investegate_pdmr", "subject": "powstock:CLCO", "unit": "GBP", "value": 4125000.0}
 {"as_of": "", "metric": "insider_buy_value", "source": "investegate_pdmr", "subject": "powstock:GTE", "unit": "GBP", "value": 54220.80000000001}
 {"as_of": "", "metric": "insider_buy_value", "source": "investegate_pdmr", "subject": "powstock:KIE", "unit": "GBP", "value": 0.0}
