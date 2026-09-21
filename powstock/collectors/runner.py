@@ -184,27 +184,25 @@ def run_prices(conn: sqlite3.Connection) -> int:
 
 def run_insiders(conn: sqlite3.Connection) -> int:
     """Run FCA PDMR insider dealing collector for universe tickers."""
-    from powstock.collectors.fca_pdmr import fetch_ticker_insiders
+    from powstock.collectors.fca_pdmr import fetch_pdmr_announcements
 
-    print("Fetching insider dealings from FCA...")
+    print("Fetching insider dealings from Investegate...")
+    # Fetch all recent PDMR announcements (not per-ticker to avoid duplicates)
+    deals = fetch_pdmr_announcements(max_pages=5)
     count = 0
 
-    for security in UNIVERSE:
+    for deal in deals:
         try:
-            deals = fetch_ticker_insiders(security.ticker, max_pages=2)
-            for deal in deals:
-                conn.execute(
-                    "INSERT INTO insider_deals (ticker, company, director, position, action, price, shares, value, trade_date, filing_date, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (deal["ticker"], deal["company"], deal["director"], deal["position"],
-                     deal["action"], deal["price"], deal["shares"], deal["value"],
-                     deal["trade_date"], deal["filing_date"], datetime.now().isoformat()),
-                )
-                _store_obs(conn, "fca_pdmr", deal["ticker"], "insider_deal", deal["action"])
-                count += 1
-
-            time.sleep(1)  # respectful rate limiting
+            conn.execute(
+                "INSERT INTO insider_deals (ticker, company, director, position, action, price, shares, value, trade_date, filing_date, observed_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (deal["ticker"], deal["company"], deal["director"], deal["position"],
+                 deal["transaction_type"], deal["price"], deal["shares"], deal["total_value"],
+                 deal["trade_date"], deal.get("filing_date", ""), datetime.now().isoformat()),
+            )
+            _store_obs(conn, "investegate", deal["ticker"], "insider_deal", deal["transaction_type"])
+            count += 1
         except Exception as e:
-            print(f"  Warning: {security.ticker} insider fetch failed: {e}")
+            print(f"  Warning: {deal.get('ticker', '?')} insert failed: {e}")
 
     _store_raw(conn, "fca_pdmr", "notifications", {"count": count})
     conn.execute(
