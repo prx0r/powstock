@@ -44,7 +44,7 @@ def test_raw_bytes_are_preserved():
 
 
 def test_raw_ingest_recorded():
-    """ArtifactStore must record raw_artifact in database."""
+    """ArtifactStore must record artifact_object in database."""
     with tempfile.TemporaryDirectory() as tmp:
         db_path = Path(tmp) / "test.db"
         conn = init_db(db_path)
@@ -60,9 +60,9 @@ def test_raw_ingest_recorded():
         )
         conn.commit()
 
-        # Check raw_artifact
-        artifact_count = conn.execute("SELECT COUNT(*) FROM raw_artifact").fetchone()[0]
-        assert artifact_count >= 1, f"Expected at least 1 raw_artifact, got {artifact_count}"
+        # Check artifact_object (new schema)
+        artifact_count = conn.execute("SELECT COUNT(*) FROM artifact_object").fetchone()[0]
+        assert artifact_count >= 1, f"Expected at least 1 artifact_object, got {artifact_count}"
 
         conn.close()
 
@@ -207,3 +207,112 @@ def test_price_collector_replay():
     assert result2 is not None, "Second fetch returned None"
     assert result1["price"] == result2["price"], "Price mismatch between cached fetches"
     assert result1["asof"] == result2["asof"], "Date mismatch between cached fetches"
+
+
+def test_ingest_run_lifecycle():
+    """IngestRun must create, track, and complete properly."""
+    from layer1.artifacts import ArtifactStore, IngestRun
+
+    with tempfile.TemporaryDirectory() as tmp:
+        db_path = Path(tmp) / "test.db"
+        conn = init_db(db_path)
+        store = ArtifactStore(base_dir=Path(tmp) / "raw", conn=conn)
+
+        # Test successful run
+        with IngestRun(conn, source="test_source", dataset="test_dataset") as run:
+            assert run.id is not None, "Run should have an ID after start"
+            assert run.status == "running"
+
+            # Store an artifact (creates artifact_object)
+            art = store.put_bytes(b"test content", source="test", dataset="test", run_id=run.id)
+            run.link_artifact(art["sha256"], art["storage_uri"], art["bytes"])
+
+            run.complete(records_seen=10, records_accepted=8, records_rejected=2)
+
+        # Verify run was recorded
+        row = conn.execute(
+            "SELECT source, status, records_seen, records_accepted FROM ingest_run WHERE run_id=?",
+            (run.id,),
+        ).fetchone()
+        assert row is not None
+        assert row[0] == "test_source"
+        assert row[1] == "ok"
+        assert row[2] == 10
+        assert row[3] == 8
+
+        # Test error run
+        with IngestRun(conn, source="failing_source") as run2:
+            raise ValueError("Simulated failure")
+
+        row2 = conn.execute(
+            "SELECT status, error_message FROM ingest_run WHERE run_id=?",
+            (run2.id,),
+        ).fetchone()
+        assert row2[0] == "error"
+        assert "Simulated failure" in row2[1]
+
+        conn.close()
+
+
+def test_foreign_key_enforcement():
+    """Foreign keys must be enforced — orphan receipt should fail."""
+    with tempfile.TemporaryDirectory() as tmp:
+        db_path = Path(tmp) / "test.db"
+        conn = init_db(db_path)
+
+        # Verify FK is on
+        fk_status = conn.execute("PRAGMA foreign_keys").fetchone()[0]
+        assert fk_status == 1, "Foreign keys should be enabled"
+
+        # Try to insert orphan receipt (non-existent run_id)
+        try:
+            conn.execute(
+                """INSERT INTO artifact_receipt
+                   (sha256, run_id, source, dataset, storage_uri, bytes, retrieved_at)
+                   VALUES ('abc123', 99999, 'test', '', '/tmp/x', 0, '2026-01-01')""",
+            )
+            conn.commit()
+            # If we get here, FK is not enforced
+            assert False, "Should have raised IntegrityError"
+        except sqlite3.IntegrityError:
+            pass  # Expected — FK enforced
+
+        conn.close()
+
+
+def test_global_content_addressing():
+    """Identical bytes stored twice should create one object, two receipts."""
+    from layer1.artifacts import ArtifactStore, IngestRun
+
+    with tempfile.TemporaryDirectory() as tmp:
+        db_path = Path(tmp) / "test.db"
+        conn = init_db(db_path)
+        store = ArtifactStore(base_dir=Path(tmp) / "raw", conn=conn)
+
+        test_data = b"identical content for dedup test"
+
+        # Store twice with different runs
+        with IngestRun(conn, source="run1") as run1:
+            art1 = store.put_bytes(test_data, source="src1", dataset="ds1", run_id=run1.id)
+            run1.complete()
+
+        with IngestRun(conn, source="run2") as run2:
+            art2 = store.put_bytes(test_data, source="src2", dataset="ds2", run_id=run2.id)
+            run2.complete()
+
+        # Same SHA256
+        assert art1["sha256"] == art2["sha256"]
+
+        # One object in DB
+        obj_count = conn.execute("SELECT COUNT(*) FROM artifact_object").fetchone()[0]
+        assert obj_count == 1, f"Expected 1 object, got {obj_count}"
+
+        # Two receipts
+        receipt_count = conn.execute("SELECT COUNT(*) FROM artifact_receipt").fetchone()[0]
+        assert receipt_count == 2, f"Expected 2 receipts, got {receipt_count}"
+
+        # Object file exists only once
+        obj_path = store.get(art1["sha256"])
+        assert obj_path is not None
+
+        conn.close()
