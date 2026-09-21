@@ -255,6 +255,157 @@ def composite_score(conn: sqlite3.Connection, ticker: str) -> Signal | None:
     )
 
 
+# ── Price momentum signals (from Layer 1 price history) ────────────
+
+
+def price_momentum_50d(conn: sqlite3.Connection, ticker: str) -> Signal | None:
+    """50-day price momentum: (current - 50d_ago) / 50d_ago.
+
+    Positive = upward momentum.
+    """
+    rows = conn.execute("""
+        SELECT close FROM price_daily
+        WHERE ticker = ? ORDER BY date DESC LIMIT 50
+    """, (ticker,)).fetchall()
+
+    if len(rows) < 2:
+        return None
+
+    current = rows[0][0]
+    oldest = rows[-1][0]
+
+    if oldest <= 0:
+        return None
+
+    momentum = (current - oldest) / oldest
+    # Normalize to 0-1: -50% = 0, 0% = 0.5, +50% = 1.0
+    normalized = min(max((momentum + 0.5) / 1.0, 0.0), 1.0)
+
+    return Signal(
+        name="price_momentum_50d",
+        ticker=ticker,
+        value=round(normalized, 4),
+        as_of=rows[0][0] if rows else "",
+        confidence=min(len(rows) / 50, 1.0),
+        inputs=["price_daily"],
+        metadata={"momentum_pct": round(momentum * 100, 2), "current": current, "oldest": oldest},
+    )
+
+
+def price_momentum_200d(conn: sqlite3.Connection, ticker: str) -> Signal | None:
+    """200-day price momentum: (current - 200d_ago) / 200d_ago.
+
+    Long-term trend signal.
+    """
+    rows = conn.execute("""
+        SELECT close FROM price_daily
+        WHERE ticker = ? ORDER BY date DESC LIMIT 200
+    """, (ticker,)).fetchall()
+
+    if len(rows) < 20:
+        return None  # need at least 20 days for meaningful signal
+
+    current = rows[0][0]
+    oldest = rows[-1][0]
+
+    if oldest <= 0:
+        return None
+
+    momentum = (current - oldest) / oldest
+    normalized = min(max((momentum + 0.5) / 1.0, 0.0), 1.0)
+
+    return Signal(
+        name="price_momentum_200d",
+        ticker=ticker,
+        value=round(normalized, 4),
+        as_of="",
+        confidence=min(len(rows) / 200, 1.0),
+        inputs=["price_daily"],
+        metadata={"momentum_pct": round(momentum * 100, 2), "current": current, "oldest": oldest},
+    )
+
+
+def moving_average_crossover(conn: sqlite3.Connection, ticker: str) -> Signal | None:
+    """MA crossover: 50-day MA vs 200-day MA.
+
+    Golden cross (50 > 200) = bullish.
+    Death cross (50 < 200) = bearish.
+    """
+    rows = conn.execute("""
+        SELECT close FROM price_daily
+        WHERE ticker = ? ORDER BY date DESC LIMIT 200
+    """, (ticker,)).fetchall()
+
+    if len(rows) < 200:
+        return None
+
+    closes = [r[0] for r in rows]
+    ma50 = sum(closes[:50]) / 50
+    ma200 = sum(closes[:200]) / 200
+
+    if ma200 <= 0:
+        return None
+
+    # Ratio: >1 = golden cross, <1 = death cross
+    ratio = ma50 / ma200
+    # Normalize to 0-1: 0.8 = 0, 1.0 = 0.5, 1.2 = 1.0
+    normalized = min(max((ratio - 0.8) / 0.4, 0.0), 1.0)
+
+    return Signal(
+        name="ma_crossover",
+        ticker=ticker,
+        value=round(normalized, 4),
+        as_of="",
+        confidence=0.9,
+        inputs=["price_daily"],
+        metadata={
+            "ma50": round(ma50, 2),
+            "ma200": round(ma200, 2),
+            "ratio": round(ratio, 4),
+            "signal": "golden_cross" if ratio > 1 else "death_cross",
+        },
+    )
+
+
+def drawdown_from_peak(conn: sqlite3.Connection, ticker: str) -> Signal | None:
+    """Current drawdown from 52-week peak.
+
+    Large drawdown = potential mean reversion or structural issue.
+    """
+    rows = conn.execute("""
+        SELECT close, date FROM price_daily
+        WHERE ticker = ? ORDER BY date DESC LIMIT 252
+    """, (ticker,)).fetchall()
+
+    if len(rows) < 20:
+        return None
+
+    closes = [r[0] for r in rows]
+    peak = max(closes)
+    current = closes[0]
+
+    if peak <= 0:
+        return None
+
+    drawdown = (peak - current) / peak
+    # Normalize: 0% drawdown = 1.0 (healthy), 50% drawdown = 0.0 (distressed)
+    normalized = 1.0 - min(drawdown / 0.5, 1.0)
+
+    return Signal(
+        name="drawdown_from_peak",
+        ticker=ticker,
+        value=round(normalized, 4),
+        as_of="",
+        confidence=min(len(rows) / 252, 1.0),
+        inputs=["price_daily"],
+        metadata={
+            "peak": peak,
+            "current": current,
+            "drawdown_pct": round(drawdown * 100, 2),
+        },
+    )
+
+
 # ── Aggregation ────────────────────────────────────────────────────
 
 
@@ -265,6 +416,10 @@ ALL_SIGNAL_FNS = [
     alignment_score,
     anomaly_score,
     composite_score,
+    price_momentum_50d,
+    price_momentum_200d,
+    moving_average_crossover,
+    drawdown_from_peak,
 ]
 
 
