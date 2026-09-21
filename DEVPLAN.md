@@ -255,3 +255,48 @@ Who moved capital?
 Where did they move it?
 How long before capacity responded?
 What happened to the relevant securities?
+
+---
+
+## Implementation Status
+
+### ✅ DONE
+- [x] Cloned all 5 reference repos to `reference/`
+- [x] Built bulk CH parsers (appointments + disqualifications) from Global-Witness pattern
+- [x] Updated entity resolver with person_number, DOB, corporate_indicator fields
+- [x] Built Finnhub UK insider transactions collector
+- [x] Built Tracefour PDMR collector (UK structured data)
+- [x] Built Companies House PSC snapshot collector
+- [x] Built filing events classifier (SH01→issuance, AP01→director, etc)
+- [x] Built insider conviction scorer (score 0-1, level LOW→VERY_HIGH)
+- [x] Built entity resolver (person→companies graph)
+- [x] Implemented self-registering tool pattern from companies-house-mcp
+- [x] Implemented server-guided Retry-After from RegistrumUK starter
+- [x] Added etag-based dedup concept from OpenOwnership ingester
+- [x] Built Yahoo Finance price collector (24/25 tickers)
+- [x] Built FCA short interest collector (421 positions)
+- [x] Built Investegate RNS announcement collector
+- [x] Built Companies House REST API collector
+
+### 🔄 IN PROGRESS
+- [ ] iXBRL parser from uk-accounts-pipeline (reference cloned, not yet implemented)
+- [ ] pow_company_state_daily schema
+- [ ] Wire up powuk physical constraint data
+- [ ] Takeover Panel disclosures collector
+- [ ] FCA TR-1 major shareholder notifications
+
+### ⏳ PENDING
+- [ ] Request CH bulk products (216, 199, 201, 197)
+- [ ] Build director network analysis
+- [ ] Build capital response index
+- [ ] Build opportunity gap measurement
+
+### Reference Repos (cloned)
+```
+reference/
+├── uk-companies-house-parsers-public/  # CH .dat fixed-width parsers
+├── register-ingester-psc/              # PSC bulk ingester (Ruby)
+├── companies-house-mcp/                # CH MCP server (TypeScript)
+├── companies-house-api-python-starter/ # CH API patterns (Python)
+└── uk-accounts-pipeline/               # iXBRL → financials (Python)
+```
