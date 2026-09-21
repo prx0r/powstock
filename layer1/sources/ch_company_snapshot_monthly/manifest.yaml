@@ -1,0 +1,37 @@
+id: ch_company_snapshot_monthly
+garden: powstock
+source:
+  authority: Companies House
+  type: csv
+  url: "https://download.companieshouse.gov.uk/"
+  backup_urls: []
+  license: "Open Government Licence v3.0"
+collection:
+  cadence: monthly
+  backfill_from: "2020-01-01"
+  method: http_get
+  rate_limit: "1/month"
+  parser: powstock.collectors.ch_company_snapshot
+storage:
+  raw: true
+  append_only: true
+  format: csv
+time:
+  source_timestamp: false
+  observed_at: true
+  effective_field: ""
+  published_field: ""
+health:
+  expected_min_rows: 4000000
+  max_staleness_hours: 720
+  schema_hash: "ch_snapshot_v1"
+  error_threshold: 3
+schema:
+  columns: [company_number, company_name, company_status, registered_office, sic_codes, incorporation_date]
+  unique_keys: [company_number]
+  event_id_fields: [company_number]
+history:
+  mode: backfill
+  earliest_available: "2020-01-01"
+  backfill_status: "pending"
+  continuity_checked: false

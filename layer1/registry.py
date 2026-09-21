@@ -173,6 +173,30 @@ register(
     function="fetch_uk_filings",
 )
 
+register(
+    source_id="ch_company_snapshot_monthly",
+    name="CH Company Snapshot (Monthly)",
+    enabled=True,
+    module="powstock.collectors.ch_company_snapshot",
+    function="download_company_snapshot",
+)
+
+register(
+    source_id="ch_accounts_bulk",
+    name="CH XBRL Accounts Bulk",
+    enabled=True,
+    module="powstock.collectors.ch_accounts_bulk",
+    function="download_accounts_bulk",
+)
+
+register(
+    source_id="fca_nsm",
+    name="FCA National Storage Mechanism",
+    enabled=True,
+    module="powstock.collectors.fca_nsm",
+    function="fetch_nsm_page",
+)
+
 
 def print_registry() -> None:
     """Print the collector registry status."""

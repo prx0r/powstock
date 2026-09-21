@@ -1,0 +1,37 @@
+id: fca_nsm
+garden: powstock
+source:
+  authority: FCA
+  type: html
+  url: "https://www.fca.org.uk/markets/primary-markets/regulatory-disclosures/national-storage-mechanism"
+  backup_urls: []
+  license: "Open Government Licence v3.0"
+collection:
+  cadence: daily
+  backfill_from: "2025-11-03"
+  method: http_get
+  rate_limit: "1s/request"
+  parser: powstock.collectors.fca_nsm
+storage:
+  raw: true
+  append_only: true
+  format: jsonl
+time:
+  source_timestamp: true
+  observed_at: true
+  effective_field: ""
+  published_field: ""
+health:
+  expected_min_rows: 10
+  max_staleness_hours: 48
+  schema_hash: "fca_nsm_v1"
+  error_threshold: 3
+schema:
+  columns: [url, title, company, lei, category, published_at]
+  unique_keys: [url]
+  event_id_fields: [url]
+history:
+  mode: forward_only
+  earliest_available: "2025-11-03"
+  backfill_status: "forward_from_today"
+  continuity_checked: false
