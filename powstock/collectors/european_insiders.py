@@ -168,7 +168,10 @@ def fetch_afm_trades(
     date_from: str | None = None,
     date_to: str | None = None,
 ) -> list[EuropeanInsiderTrade]:
-    """Fetch Dutch insider trades for an ISIN from AFM."""
+    """Fetch Dutch insider trades for an ISIN from AFM.
+
+    Note: AFM API URL may have changed. Returns empty on failure.
+    """
     trades = []
 
     try:
@@ -186,11 +189,17 @@ def fetch_afm_trades(
             AFM_URL,
             params=params,
             headers={"Referer": "https://www.afm.nl/", "User-Agent": "Mozilla/5.0"},
-            timeout=30,
+            timeout=15,
         )
         resp.raise_for_status()
-        data = resp.json()
 
+        # Check if we got JSON or HTML (API changed)
+        content_type = resp.headers.get("content-type", "")
+        if "html" in content_type:
+            log.debug("AFM returned HTML (API may have changed), skipping")
+            return []
+
+        data = resp.json()
         records = data if isinstance(data, list) else data.get("results", data.get("items", []))
 
         for rec in records:
@@ -210,7 +219,7 @@ def fetch_afm_trades(
                 raw=rec,
             ))
     except Exception as e:
-        log.warning("AFM error for %s: %s", isin, e)
+        log.debug("AFM error for %s: %s", isin, e)
 
     return trades
 

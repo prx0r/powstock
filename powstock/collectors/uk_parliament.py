@@ -39,7 +39,7 @@ def _fetch_with_retry(client: httpx.Client, url: str, params: dict | None = None
     """Fetch with retry on 429/5xx."""
     for attempt in range(MAX_RETRIES):
         try:
-            resp = client.get(url, params=params, timeout=10)
+            resp = client.get(url, params=params, timeout=8)
             if resp.status_code == 429:
                 retry_after = int(resp.headers.get("Retry-After", RETRY_DELAY * (2 ** attempt)))
                 time.sleep(min(retry_after, 10))
@@ -134,12 +134,12 @@ def extract_shareholdings(interests: list[dict]) -> list[dict]:
 
 def fetch_all_mp_shareholdings(
     client: httpx.Client | None = None,
-    max_mps: int = 5,
+    max_mps: int = 10,
 ) -> list[MPShareholding]:
     """Fetch shareholdings for MPs.
 
     Args:
-        max_mps: Maximum MPs to scan (default 50 for speed; set to -1 for all).
+        max_mps: Maximum MPs to scan (default 30 for balance of coverage/speed).
     """
     should_close = client is None
     if client is None:
@@ -175,7 +175,7 @@ def fetch_all_mp_shareholdings(
             if (i + 1) % 50 == 0:
                 log.info("Fetched interests for %d/%d MPs", i + 1, len(members))
 
-            time.sleep(0.05)
+            time.sleep(0.02)
     finally:
         if should_close:
             client.close()

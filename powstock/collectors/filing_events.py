@@ -190,24 +190,27 @@ def fetch_company_events(
 
 def fetch_universe_events(
     max_results_per_company: int = 50,
+    max_companies: int = 5,
 ) -> dict[str, list[dict[str, Any]]]:
-    """Fetch recent filing events for all universe companies.
+    """Fetch recent filing events for universe companies.
+
+    Args:
+        max_companies: Limit number of companies to scan (default 5 for speed).
 
     Returns: {ticker: [events]}
     """
-    from powstock.collectors.companies_house import fetch_universe_companies
+    from powstock.universe import UNIVERSE
 
-    companies = fetch_universe_companies()
     results: dict[str, list[dict[str, Any]]] = {}
 
-    for ticker, data in companies.items():
-        company_number = data.get("company_number", "")
+    for security in UNIVERSE[:max_companies]:
+        company_number = security.company_number
         if not company_number:
             continue
 
         events = fetch_company_events(company_number, max_results_per_company)
         if events:
-            results[ticker] = events
+            results[security.ticker] = events
 
     return results
 

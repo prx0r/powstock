@@ -103,25 +103,25 @@ def _create_senate_session(client: httpx.Client) -> dict[str, str]:
     """Create authenticated Senate session with CSRF."""
     session_cookies = {}
 
-    # Step 1: GET landing page
+    # Step 1: GET home page (CSRF is here, not on landing page)
     try:
-        resp = client.get(SENATE_LANDING_URL)
+        resp = client.get(SENATE_HOME_URL)
         csrf_match = re.search(r'name="csrfmiddlewaretoken"\s+value="([^"]+)"', resp.text)
         if not csrf_match:
-            log.warning("Could not find CSRF token on Senate landing page")
+            log.warning("Could not find CSRF token on Senate page")
             return {}
 
         csrf_token = csrf_match.group(1)
         session_cookies["csrftoken"] = csrf_token
 
         # Step 2: Accept prohibition agreement
-        client.post(
+        resp2 = client.post(
             SENATE_HOME_URL,
             data={
                 "csrfmiddlewaretoken": csrf_token,
                 "prohibition_agreement": "1",
             },
-            headers={"Referer": SENATE_LANDING_URL},
+            headers={"Referer": SENATE_HOME_URL},
         )
     except Exception as e:
         log.warning("Senate session creation failed: %s", e)

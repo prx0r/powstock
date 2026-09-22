@@ -38,7 +38,11 @@ class BoERate:
 
 
 def fetch_dmo_yields(client: httpx.Client | None = None) -> list[GiltYield]:
-    """Fetch current DMO gilt yield curve."""
+    """Fetch current DMO gilt yield curve.
+
+    Note: DMO website may be behind Cloudflare captcha.
+    Falls back to Bank of England base rate only if yield curve unavailable.
+    """
     should_close = client is None
     if client is None:
         client = httpx.Client(timeout=30, follow_redirects=True)
@@ -52,9 +56,14 @@ def fetch_dmo_yields(client: httpx.Client | None = None) -> list[GiltYield]:
         )
         resp.raise_for_status()
 
+        # Check if we got CSV or HTML (captcha)
+        content_type = resp.headers.get("content-type", "")
+        if "html" in content_type or "captcha" in resp.text[:200].lower():
+            log.info("DMO behind captcha, skipping yield curve")
+            return []
+
         reader = csv.DictReader(io.StringIO(resp.text))
         for row in reader:
-            # DMO CSV format: Date, Maturity, Yield
             date = row.get("Date", row.get("date", ""))
             for key, val in row.items():
                 if key in ("Date", "date"):
