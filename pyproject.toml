@@ -8,12 +8,19 @@ dependencies = [
     "pydantic",
     "pydantic-settings",
     "pyyaml",
+    "python-dateutil",
 ]
 
 [project.optional-dependencies]
 dev = ["pytest", "ruff"]
+api = ["fastapi", "uvicorn"]
 mcp = ["mcp"]
 k3 = ["powkernel"]
+
+[project.scripts]
+powstock = "powstock.collectors.runner:main"
+powstock-api = "powstock.api:app"
+powstock-mcp = "powstock.mcp:run_stdio"
 
 [build-system]
 requires = ["hatchling"]
@@ -24,3 +31,7 @@ testpaths = ["tests"]
 markers = [
     "integration: end-to-end tests against live APIs (deselect with '-m not integration')",
 ]
+
+[tool.ruff]
+line-length = 120
+target-version = "py311"
