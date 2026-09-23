@@ -8,6 +8,7 @@ __pycache__/
 data/raw/
 data/normalized/
 data/parquet/
+data/heartbeat.json
 dist/
 *.egg-info/
 .venv/

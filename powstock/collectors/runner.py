@@ -224,6 +224,23 @@ def init_db(db_path: Path | None = None) -> sqlite3.Connection:
             event_time TEXT,
             observed_at TEXT NOT NULL
         );
+
+        -- ============================================================
+        -- powops compatibility view (maps ingest_run to collector_run schema)
+        -- ============================================================
+
+        CREATE VIEW IF NOT EXISTS collector_run AS
+        SELECT
+            run_id,
+            source AS source_id,
+            started_at,
+            completed_at,
+            status,
+            error_message AS error,
+            CAST((julianday(completed_at) - julianday(started_at)) * 86400 AS INTEGER) AS duration_seconds,
+            records_seen AS source_records_new,
+            0 AS raw_new
+        FROM ingest_run;
     """)
 
     conn.commit()
@@ -1088,6 +1105,9 @@ def run_all(conn: sqlite3.Connection | None = None) -> dict[str, int]:
 
     conn.commit()
 
+    # Write heartbeat file for powops monitoring
+    _write_heartbeat(results)
+
     print(f"\n{'='*60}")
     print("Summary:")
     for name, count in results.items():
@@ -1098,6 +1118,32 @@ def run_all(conn: sqlite3.Connection | None = None) -> dict[str, int]:
         conn.close()
 
     return results
+
+
+def _write_heartbeat(results: dict[str, int]) -> None:
+    """Write heartbeat JSON for powops monitoring.
+
+    Creates data/heartbeat.json with timestamp and run stats.
+    powops reads this to confirm the pipeline is alive.
+    """
+    heartbeat_dir = Path("data")
+    heartbeat_dir.mkdir(parents=True, exist_ok=True)
+    heartbeat_path = heartbeat_dir / "heartbeat.json"
+
+    total_records = sum(v for v in results.values() if isinstance(v, int))
+    sources_run = len([v for v in results.values() if isinstance(v, int) and v > 0])
+    sources_failed = len([v for v in results.values() if isinstance(v, int) and v == 0])
+
+    heartbeat = {
+        "heartbeat_at": datetime.now().isoformat(),
+        "mode": "run_all",
+        "total_records": total_records,
+        "sources_run": sources_run,
+        "sources_failed": sources_failed,
+        "results": results,
+    }
+
+    heartbeat_path.write_text(json.dumps(heartbeat, indent=2, default=str))
 
 
 def status(conn: sqlite3.Connection | None = None) -> None:

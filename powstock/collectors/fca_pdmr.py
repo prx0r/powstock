@@ -137,7 +137,7 @@ def _parse_pdmr_notification(html: str, ticker: str, company_name: str, url: str
                 # precision is poisonous.
                 for role, name in director_pairs:
                     name = name.strip()
-                    if len(name) > 3:
+                    if len(name) > 3 and not name.isdigit():
                         deals.append(PDMRDeal(
                             ticker=ticker,
                             company_name=company_name,
