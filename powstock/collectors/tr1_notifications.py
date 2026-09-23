@@ -6,13 +6,12 @@ FCA National Storage Mechanism.
 
 URL: https://www.fca.org.uk/markets/primary-markets/regulatory-disclosures/shareholding-notification-disclosure
 
-Status: STALE
+Status: WIRED INTO RUN_ALL
 - Registered in layer1/registry.py as "tr1_notifications" (enabled=True).
 - Imported by powstock/collectors/__init__.py.
-- NOT called by runner.py run_all().
+- Called by runner.py run_all().
 - Currently just scrapes Investegate RNS headlines for "TR-1" — needs proper
   field parsing (shareholder, previous/new %, threshold crossed).
-- To activate: add to runner.py, improve parsing.
 """
 
 from datetime import datetime

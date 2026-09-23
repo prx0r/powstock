@@ -5,11 +5,10 @@ These contain structured financial data for UK companies.
 
 URL: https://download.companieshouse.gov.uk/
 
-Status: STALE
+Status: WIRED INTO RUN_ALL
 - Registered in layer1/registry.py as "ch_accounts_bulk" (enabled=True).
-- NOT called by runner.py run_all().
-- No missing dependencies (uses httpx which is installed).
-- To activate: add run_accounts_bulk() call to runner.py run_all().
+- Called by runner.py run_all() as run_ch_accounts_bulk().
+- Retries last 7 days if current date not available.
 """
 
 import hashlib
@@ -71,7 +70,8 @@ def download_accounts_bulk(
 
         resp.raise_for_status()
 
-        # Archive raw ZIP
+        # Archive raw ZIP — extract filename from URL
+        filename = url.split("/")[-1]
         archive_path = date_dir / filename
         archive_path.write_bytes(resp.content)
 

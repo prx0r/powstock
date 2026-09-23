@@ -5,12 +5,10 @@ Updated monthly. Contains every active/dissolved company.
 
 URL: https://download.companieshouse.gov.uk/
 
-Status: STALE
+Status: WIRED INTO RUN_ALL
 - Registered in layer1/registry.py as "ch_company_snapshot_monthly" (enabled=True).
-- NOT called by runner.py run_all().
-- BUG: Line 30 references CH_Bulk_BASE (capital B) but constant is CH_BULK_BASE.
-  discover_company_snapshot_files() will crash with NameError.
-- To activate: fix the NameError, add run to runner.py.
+- Called by runner.py run_all() as run_ch_company_snapshot().
+- Falls back to previous month if current month not available.
 """
 
 import hashlib

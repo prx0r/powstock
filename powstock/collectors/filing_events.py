@@ -11,10 +11,10 @@ Classifies filings into corporate events:
 - CS01 → ownership_snapshot
 - AA → accounts_filed
 
-Status: STALE
+Status: WIRED INTO RUN_ALL
 - Registered in layer1/registry.py as "filing_events" (enabled=True).
 - Imported by powstock/collectors/__init__.py.
-- NOT called by runner.py run_all().
+- Called by runner.py run_all().
 - Requires CH API key (same as companies_house collector).
 - To activate: add to runner.py run_all().
 """
