@@ -51,7 +51,7 @@ class TestYahooPrices:
 class TestFCAShortInterest:
     def test_fetch_short_positions(self):
         from powstock.collectors.fca_short_interest import fetch_current_short_positions
-        positions = fetch_current_short_positions()
+        positions, raw_bytes = fetch_current_short_positions()
         assert len(positions) > 100  # FCA typically has 400+ positions
         for pos in positions[:5]:
             assert pos.isin != ""
