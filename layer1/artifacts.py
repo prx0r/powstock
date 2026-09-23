@@ -88,9 +88,9 @@ class IngestRun:
         """Record the start of an ingest run."""
         cursor = self.conn.execute(
             """INSERT INTO ingest_run
-               (source, dataset, started_at, status, parser_version, source_url)
-               VALUES (?, ?, ?, 'running', ?, ?)""",
-            (self.source, self.dataset, self.started_at, self.parser_version, self.source_url),
+               (source, dataset, started_at, retrieved_at, status, parser_version, source_url)
+               VALUES (?, ?, ?, ?, 'running', ?, ?)""",
+            (self.source, self.dataset, self.started_at, self.started_at, self.parser_version, self.source_url),
         )
         self.id = cursor.lastrowid
         self.conn.commit()
