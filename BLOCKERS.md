@@ -1,112 +1,102 @@
-# Blockers → Free Alternatives
+# BLOCKERS.md — What I Can't Do
 
-Things that were blocked but now have free paths forward.
+> Things that need human intervention. Everything else is done.
 
-## ✅ SOLVED — Use These Now
+---
 
-### UK PDMR Insider Data → Tracefour API (FREE)
-- **URL**: https://tracefour.com/uk
-- **API**: https://tracefour.com/api-docs
-- **Status**: ✅ FREE, key required (sign in, no payment)
-- **What**: 1.9K UK PDMR filings in 90-day window, refreshed hourly
-- **Rate**: 60 requests/hour per key
-- **Endpoints**:
-  - `GET /v1/eu/uk` — recent UK PDMR filings
-  - `GET /v1/filings?direction=P&min_value=100000` — filtered buys
-  - `GET /v1/clusters` — cluster buys (3+ insiders same direction)
-  - `GET /v1/streaks` — consecutive buying streaks
-- **Also has**: SEC Form 4, Congress trades, Germany BaFin, Sweden FI, Netherlands AFM
-- **Static exports**: `/data/trackers/{slug}.json` — no key needed, CORS-open
+## API Keys Needed
 
-### UK PDMR via AI → ddbx MCP (FREE)
-- **URL**: https://ddbx.uk/mcp
-- **Status**: ✅ FREE, no key, no sign-in
-- **What**: Ask Claude/ChatGPT "What did UK directors buy this week?"
-- **Tools**: `search_dealings`, `get_dealing`, `get_company`, `get_daily_summary`
-- **Setup**: Add `https://api.ddbx.uk/mcp` as MCP server in Claude/ChatGPT
-- **Limitation**: No written analysis (that's the paid product), but has who/what/when/price/value
+### Tracefour API Key (HIGHEST PRIORITY)
+- **What:** Structured UK PDMR insider dealing data, queryable by ticker
+- **Why:** Without this, insider deals for our 25 universe tickers depend on Investegate global feed (which rarely includes our tickers)
+- **Unblocks:** insider_pressure, alignment_score, anomaly_score, composite_score signals
+- **Cost:** Free (60 req/hr)
+- **Where:** https://www.tracefour.com
+- **Env var:** `POWSTOCK_TRACEFOUR_API_KEY`
 
-### UK Company Data → Companies House MCP (FREE)
-- **URL**: https://github.com/HelpCode-ai/anythingmcp
-- **Status**: ✅ FREE, API key required (register at developer.company-information.service.gov.uk)
-- **What**: Search companies, get officers, filing history, charges, PSC
-- **Rate**: 600 requests per 5 minutes
-- **Key**: Set `POWSTOCK_COMPANIES_HOUSE_API_KEY` in `.env` (register at developer.company-information.service.gov.uk)
+### Finnhub API Key
+- **What:** Backup insider transaction data (SEC filings for UK tickers)
+- **Why:** Fallback if Tracefour is down
+- **Cost:** Free (60 calls/min)
+- **Where:** https://finnhub.io
+- **Env var:** `POWSTOCK_FINNHUB_API_KEY`
 
-### US Insider Data → InsiderGraph (FREE)
-- **URL**: https://api.insidergraph.com/v1/ownership?tickers=NVDA
-- **MCP**: https://api.insidergraph.com/mcp
-- **Status**: ✅ FREE (anonymous: 90-day window, 1 req/s)
-- **What**: SEC Form 4 ownership data, insider transactions
-- **Free key**: Message @insidergraph_bot on Telegram, send /apikey
+---
 
-### US Insider Data → Finnhub (FREE)
-- **URL**: https://finnhub.io/docs/api/insider-transactions
-- **Status**: ✅ FREE tier (60 calls/min)
-- **What**: `GET /api/v1/stock/insider-transactions?symbol=LSEG.L` — works for UK too
-- **Register**: https://finnhub.io/register
+## External Service Blockers
 
-## 🔄 ALTERNATIVES — Instead of Paid Blockers
+### FCA NSM — Cloudflare 403
+- **What:** FCA National Storage Mechanism filings
+- **Error:** `Client error '403 Forbidden' for url 'https://data.fca.org.uk/api/nsm?page=1&pageSize=50'`
+- **Cause:** FCA website blocks automated requests with Cloudflare
+- **Fix:** Need proxy, cookies, or browser-based scraping
+- **Impact:** Low (filing_events collector already gets this data from Companies House)
 
-### Instead of ddbx API (private beta) → Use Tracefour + ddbx MCP
-- Tracefour gives you the raw PDMR data via API
-- ddbx MCP gives you conversational access via Claude
-- Together they cover what the paid API would provide
+### UK Parliament — Timeout
+- **What:** MP shareholdings register
+- **Error:** Hangs on HTTP requests (no output after 30s)
+- **Cause:** Parliament website is slow or rate-limiting
+- **Fix:** Increase timeout, add retry with backoff
+- **Impact:** Low (nice-to-have, not critical for signals)
 
-### Instead of Smart Insider (enterprise) → Use Tracefour clusters + streaks
-- Tracefour `/v1/clusters` gives cluster buy detection (free)
-- Tracefour `/v1/streaks` gives consecutive buying streaks (free)
-- These are the key signals Smart Insider charges for
+### European Insiders — Timeout
+- **What:** BaFin/AMF/AFM insider trading notifications
+- **Error:** Hangs on HTTP requests
+- **Cause:** European regulator websites are slow or blocking
+- **Fix:** Increase timeout, add retry
+- **Impact:** Low (supplementary data, not core)
 
-### Instead of LSE RNS Feed (GBP 6.5k/yr) → Use Investegate + Tracefour
-- Our Investegate collector already scrapes RNS announcements
-- Tracefour has the structured PDMR data from the same source
-- Together: free, near-real-time
+### Congress Trades — 403 + Parse Error
+- **What:** US Congress trading disclosures
+- **Errors:**
+  - House: `XML parse error: not well-formed`
+  - Senate: `CSRF token not found` + `403 Forbidden`
+- **Cause:** Congress websites changed structure or block scrapers
+- **Fix:** Update parsers for new HTML structure
+- **Impact:** Low (US data, not UK-focused)
 
-### Instead of FCA NSM (Cloudflare blocked) → Use Tracefour
-- Tracefour scrapes FCA NSM and serves it free via API
-- Same data, no Cloudflare headache
+### DMO Gilts — 404
+- **What:** UK gilt yields and BoE rates
+- **Error:** `404 Not Found for url 'https://www.dmo.gov.uk/resdata/opendata/gilt-repo/yld_CURVE.csv?csv=1'`
+- **Cause:** DMO changed their data URL
+- **Fix:** Find new URL, update collector
+- **Impact:** Low (supplementary macro data)
 
-### Instead of OpenInsider UK (doesn't exist) → Use Tracefour UK
-- OpenInsider is US-only
-- Tracefour UK page is the equivalent for UK stocks
+### CH Bulk Downloads — Timing
+- **What:** Companies House monthly snapshots (company data, accounts, PSC)
+- **Error:** `CH snapshot not found for 2026-09` / `CH accounts bulk not found for 2026-09-22`
+- **Cause:** Bulk data isn't published daily — monthly or quarterly
+- **Fix:** Adjust collector to check for latest available month, not current date
+- **Impact:** Medium (historical data, not real-time)
 
-## ⚠️ STILL BLOCKED (but less critical)
+---
 
-### XBRL Financial Extraction
-- **What**: Parse filed accounts into revenue/profit/employees
-- **Status**: No free tool does this well for UK accounts
-- **Options**: Arelle (open source), or LLM extraction (slow, expensive)
-- **Impact**: Medium — we can get basic company data from Companies House API
+## Code Issues (Can Fix, Not Yet Done)
 
-### Ticker→ISIN Mapping
-- **What**: Match universe tickers to FCA short interest ISINs
-- **Status**: Manual mapping needed
-- **Options**: Build mapping table from Companies House data, or use OpenFIGI (free, need key)
-- **Impact**: Low — we already match by company name
+### Finnhub Collector — Not Tested
+- **Status:** Wired into run_all(), never successfully run
+- **Needs:** API key + test run
+- **Priority:** Low (Tracefour is primary insider source)
 
-### Real-Time L2 Order Book
-- **What**: IBKR Level 2 data for thin AIM stocks
-- **Status**: Requires IBKR account + market data subscription
-- **Impact**: Low — prices from Yahoo are fine for now
+### Entity Resolver — Dead Code
+- **Status:** Import bug fixed, but never wired into pipeline
+- **Needs:** Wire into daily pipeline, test with real data
+- **Priority:** Medium (enables cross-company insider analysis)
 
-## 📊 FREE DATA SOURCES SUMMARY
+### Collector Registry — Not Used
+- **Status:** 20 collectors registered in layer1/registry.py, but run_all() has hardcoded calls
+- **Needs:** Refactor run_all() to derive from registry
+- **Priority:** Low (functional as-is, just not DRY)
 
-| Source | What | Rate | Key? | UK? |
-|--------|------|------|------|-----|
-| **Tracefour API** | PDMR filings, clusters, streaks | 60/hr | Yes (free) | ✅ |
-| **ddbx MCP** | Conversational insider data | Unlimited | No | ✅ |
-| **Companies House** | Company profiles, officers, filings | 600/5min | Yes (free) | ✅ |
-| **Finnhub** | Insider transactions | 60/min | Yes (free) | ✅ |
-| **InsiderGraph** | SEC ownership data | 1/sec | Optional | ❌ (US) |
-| **Investegate** | RNS announcements | Scraping | No | ✅ |
-| **Yahoo Finance** | OHLCV prices | Rate limited | No | ✅ |
-| **FCA ANSP** | Short interest | Daily | No | ✅ |
+---
 
-## 🎯 IMMEDIATE ACTION ITEMS
+## What's Done (For Reference)
 
-1. **Get Tracefour API key** — sign in at tracefour.com, create key in Settings
-2. **Add ddbx MCP to Claude** — paste `https://api.ddbx.uk/mcp` as connector
-3. **Build Tracefour collector** — fetch `/v1/eu/uk` for structured PDMR data
-4. **Add Finnhub for UK** — register free, use `?symbol=NG.L` for insider transactions
-5. **Build cluster detection** — use Tracefour clusters endpoint for multi-insider buys
+- [x] Price backfill: 11,506 rows across 24/25 tickers
+- [x] Insider parser: filters to universe tickers only
+- [x] Short interest matching: 15/25 tickers matched (ISIN + name)
+- [x] 3 artifact bugs fixed (uninitialized variable)
+- [x] Filing events collector: now working (100 events)
+- [x] Systemd timer: automated collection every 4 hours
+- [x] powops integration: 8/18 sources active
+- [x] BLOCKERS.md: this file

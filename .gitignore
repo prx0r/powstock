@@ -12,3 +12,5 @@ data/heartbeat.json
 dist/
 *.egg-info/
 .venv/
+data/powstock.db-shm
+data/powstock.db-wal

@@ -255,6 +255,16 @@ def _store_obs(conn: sqlite3.Connection, source: str, ticker: str, metric: str, 
     )
 
 
+def _normalize_company_name(name: str) -> str:
+    """Normalize company name for fuzzy matching."""
+    name = name.upper().strip()
+    # Remove common suffixes
+    for suffix in [' PLC', ' LIMITED', ' LTD', ' LTD.', ' PLC.', ' LIMITED.',
+                   ' PUBLIC LIMITED COMPANY', ' P L C', ' GROUP', ' GROUP PLC']:
+        name = name.replace(suffix, '')
+    return name.strip()
+
+
 def run_prices(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
     """Run Yahoo Finance price collector for all universe tickers.
 
@@ -268,6 +278,7 @@ def run_prices(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = 
                    source_url="https://query1.finance.yahoo.com/v8/finance/chart") as run:
         prices = fetch_all_latest()
         count = 0
+        artifact = None
 
         # Store raw JSON as artifact (this is the provider response, not our normalization)
         if artifact_store and prices:
@@ -306,7 +317,9 @@ def run_prices(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = 
 def run_insiders(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = None) -> int:
     """Run FCA PDMR insider dealing collector for universe tickers."""
     from powstock.collectors.fca_pdmr import fetch_pdmr_announcements
+    from powstock.universe import UNIVERSE
 
+    universe_tickers = {s.ticker for s in UNIVERSE}
     print("Fetching insider dealings from Investegate...")
 
     with IngestRun(conn, source="investegate_pdmr", dataset="notification_html",
@@ -326,7 +339,13 @@ def run_insiders(conn: sqlite3.Connection, artifact_store: ArtifactStore | None 
                 )
 
         count = 0
+        skipped = 0
         for deal in deals:
+            # Filter to universe tickers only
+            if deal["ticker"] not in universe_tickers:
+                skipped += 1
+                continue
+
             try:
                 import hashlib as _hl
                 event_id = _hl.sha256(
@@ -363,7 +382,7 @@ def run_insiders(conn: sqlite3.Connection, artifact_store: ArtifactStore | None 
 
         run.complete(records_seen=len(deals), records_accepted=count)
 
-    print(f"  Insiders: {count} deals found")
+    print(f"  Insiders: {count} universe deals ({skipped} non-universe skipped)")
     return count
 
 
@@ -376,6 +395,7 @@ def run_short_interest(conn: sqlite3.Connection, artifact_store: ArtifactStore |
     with IngestRun(conn, source="fca_ansp", dataset="short_positions_xlsx",
                    source_url="https://www.fca.org.uk/publication/documents/aggregated-net-short-positions.xlsx") as run:
         positions, raw_bytes = fetch_current_short_positions()
+        artifact = None
 
         # Store raw XLSX artifact
         if artifact_store and raw_bytes:
@@ -391,13 +411,21 @@ def run_short_interest(conn: sqlite3.Connection, artifact_store: ArtifactStore |
         count = 0
         for pos in positions:
             ticker = None
+            # Match by ISIN first (exact)
             for security in UNIVERSE:
                 if security.isin and security.isin.upper() == pos.isin.upper():
                     ticker = security.ticker
                     break
+            # Fallback: match by normalized company name
             if ticker is None:
+                pos_name = _normalize_company_name(pos.issuer_name)
                 for security in UNIVERSE:
-                    if security.company.upper() == pos.issuer_name.upper():
+                    sec_name = _normalize_company_name(security.company)
+                    if sec_name and pos_name and sec_name == pos_name:
+                        ticker = security.ticker
+                        break
+                    # Partial match: universe name contained in FCA name
+                    if sec_name and len(sec_name) > 3 and sec_name in pos_name:
                         ticker = security.ticker
                         break
 
@@ -440,6 +468,7 @@ def run_rns(conn: sqlite3.Connection, artifact_store: ArtifactStore | None = Non
     with IngestRun(conn, source="investegate_rns", dataset="company_pages",
                    source_url="https://www.investegate.co.uk") as run:
         for security in UNIVERSE:
+            artifact = None
             try:
                 html = fetch_investegate_page(ticker=security.ticker, page=1)
                 if artifact_store and html:
