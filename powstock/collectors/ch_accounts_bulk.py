@@ -46,21 +46,27 @@ def download_accounts_bulk(
     date_dir = archive_dir / date_str
     date_dir.mkdir(parents=True, exist_ok=True)
 
-    # Companies House XBRL accounts bulk files
-    filename = f"ch-{date_str}-accounts.zip"
-    url = f"{CH_BULK_BASE}/{filename}"
-
+    # Companies House XBRL accounts bulk files — try multiple dates
     client = httpx.Client(timeout=300, follow_redirects=True)
     try:
-        resp = client.get(url)
-        if resp.status_code == 404:
-            # Try alternate naming
-            filename = f"Accounts-{date_str}.zip"
-            url = f"{CH_BULK_BASE}/{filename}"
-            resp = client.get(url)
+        resp = None
+        for days_back in range(1, 8):
+            d = datetime.strptime(date_str, "%Y-%m-%d") - __import__('datetime').timedelta(days=days_back)
+            try_date = d.strftime("%Y-%m-%d")
+            for pattern in [f"ch-{try_date}-accounts.zip", f"Accounts-{try_date}.zip"]:
+                url = f"{CH_BULK_BASE}/{pattern}"
+                resp = client.get(url)
+                if resp.status_code == 200:
+                    date_str = try_date
+                    date_dir = archive_dir / date_str
+                    date_dir.mkdir(parents=True, exist_ok=True)
+                    break
+                resp = None
+            if resp:
+                break
 
-        if resp.status_code == 404:
-            log.warning("CH accounts bulk not found for %s", date_str)
+        if resp is None:
+            log.warning("CH accounts bulk not found (tried last 7 days)")
             return None
 
         resp.raise_for_status()

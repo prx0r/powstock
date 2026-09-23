@@ -52,16 +52,20 @@ def download_company_snapshot(
     """Download and archive the monthly company snapshot.
 
     This is a large file (~469 MB). We archive the raw file first.
+    Tries current month, then previous month if not available.
 
     Args:
-        month: Month to fetch (YYYY-MM format). Default: current month.
+        month: Month to fetch (YYYY-MM format). Default: current month, fallback to previous.
         archive_dir: Directory to archive raw files.
 
     Returns:
         Dict with metadata about the download.
     """
+    from dateutil.relativedelta import relativedelta
+
     if month is None:
-        month = datetime.now().strftime("%Y-%m")
+        now = datetime.now()
+        month = now.strftime("%Y-%m")
 
     date_dir = archive_dir / month
     date_dir.mkdir(parents=True, exist_ok=True)
@@ -75,8 +79,16 @@ def download_company_snapshot(
     try:
         resp = client.get(url)
         if resp.status_code == 404:
-            log.warning("CH snapshot not found for %s: %s", month, url)
-            return None
+            # Try previous month
+            prev = datetime.strptime(month, "%Y-%m") - relativedelta(months=1)
+            prev_month = prev.strftime("%Y-%m")
+            filename = f"BasicCompanyData-{prev_month}.csv"
+            url = f"{CH_BULK_BASE}/{filename}"
+            resp = client.get(url)
+            if resp.status_code == 404:
+                log.warning("CH snapshot not found for %s or %s", month, prev_month)
+                return None
+            month = prev_month
 
         resp.raise_for_status()
 
